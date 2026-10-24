@@ -1,0 +1,36 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: shelfwise
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: shelfwise
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U shelfwise -d shelfwise"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  shelfwise:
+    image: ghcr.io/niek654/shelfwise:latest
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      SHELFWISE_DATABASE_URL: postgresql+psycopg://shelfwise:${POSTGRES_PASSWORD}@db:5432/shelfwise
+    ports:
+      - "${SHELFWISE_PORT:-8000}:8000"
+    volumes:
+      # Library files, covers and pending uploads. To use a host folder instead,
+      # replace with e.g. "./data:/data" and run: sudo chown -R 1000:1000 ./data
+      - library:/data
+
+volumes:
+  db-data:
+  library:
