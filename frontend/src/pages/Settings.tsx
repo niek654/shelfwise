@@ -1,9 +1,31 @@
 import { FormEvent, useState } from "react";
-import { Monitor, Moon, Sun } from "lucide-react";
-import { api } from "../lib/api";
+import { Check, Monitor, Moon, Power, Sun, X } from "lucide-react";
+import { api, Provider } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { Theme, useTheme } from "../lib/theme";
 import { useToast } from "../lib/toast";
+
+function StatusBadge({ provider: p }: { provider: Provider }) {
+  if (!p.enabled) {
+    return (
+      <span className="badge gap-1 bg-ink-100 text-ink-500 dark:bg-ink-800 dark:text-ink-400">
+        <X className="h-3 w-3" /> Needs API credentials
+      </span>
+    );
+  }
+  if (!p.active) {
+    return (
+      <span className="badge gap-1 bg-ink-100 text-ink-500 dark:bg-ink-800 dark:text-ink-400">
+        <Power className="h-3 w-3" /> Turned off
+      </span>
+    );
+  }
+  return (
+    <span className="badge gap-1 bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400">
+      <Check className="h-3 w-3" /> Enabled
+    </span>
+  );
+}
 
 function Switch({ checked, disabled, label, onChange }: { checked: boolean; disabled?: boolean; label: string; onChange: (v: boolean) => void }) {
   return (
@@ -103,21 +125,30 @@ export default function Settings() {
         </p>
         <ul className="mt-4 divide-y divide-ink-100 dark:divide-ink-800">
           {config?.providers.map((p) => (
-            <li key={p.name} className="flex items-center justify-between gap-3 py-2.5 text-sm">
+            <li key={p.name} className="flex items-start justify-between gap-3 py-3 text-sm sm:items-center">
               <span className="min-w-0">
                 {p.label}
+                {/* On phones the status sits under the name; on wider screens next to the switch. */}
+                <span className="mt-1 flex sm:hidden">
+                  <StatusBadge provider={p} />
+                </span>
                 {!p.enabled ? (
-                  <span className="block text-xs text-ink-500 dark:text-ink-400">{p.note ?? "Needs API credentials"}</span>
+                  <span className="mt-1 block text-xs text-ink-500 dark:text-ink-400">{p.note}</span>
                 ) : (
-                  p.active && p.note && <span className="block text-xs text-amber-600 dark:text-amber-400">{p.note}</span>
+                  p.active && p.note && <span className="mt-1 block text-xs text-amber-600 dark:text-amber-400">{p.note}</span>
                 )}
               </span>
-              <Switch
-                checked={p.active}
-                disabled={!user?.is_admin || !p.enabled || busy === p.name}
-                label={`${p.label} ${p.active ? "on" : "off"}`}
-                onChange={(on) => toggleProvider(p.name, on)}
-              />
+              <span className="flex shrink-0 items-center gap-3">
+                <span className="hidden sm:flex">
+                  <StatusBadge provider={p} />
+                </span>
+                <Switch
+                  checked={p.active}
+                  disabled={!user?.is_admin || !p.enabled || busy === p.name}
+                  label={`${p.label} ${p.active ? "on" : "off"}`}
+                  onChange={(on) => toggleProvider(p.name, on)}
+                />
+              </span>
             </li>
           ))}
         </ul>
