@@ -205,6 +205,11 @@ export const SOURCE_LABELS: Record<string, string> = {
   open_library: "Open Library",
   worldcat: "WorldCat",
   crossref: "Crossref",
+  hardcover: "Hardcover",
+  apple_books: "Apple Books",
+  kb: "KB",
+  dnb: "DNB",
+  openalex: "OpenAlex",
   combined: "Combined",
   file: "From file",
 };

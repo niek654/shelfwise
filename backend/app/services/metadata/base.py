@@ -46,3 +46,13 @@ def strip_html(value: Optional[str]) -> Optional[str]:
     if not value:
         return None
     return re.sub(r"<[^>]+>", "", value).strip() or None
+
+
+_ARTICLE = re.compile(r"^(.*?)\s*, (The|A|An|De|Het|Een|Der|Die|Das|Le|La|Les)$")
+
+
+def split_title(raw: str) -> "tuple[str, Optional[str]]":
+    """'Pragmatic Programmer, The: Your journey' -> ('The Pragmatic Programmer', 'Your journey')."""
+    main, _, sub = re.sub(r"\s+:\s*", ": ", raw or "").partition(": ")
+    main = _ARTICLE.sub(r"\2 \1", main.strip())
+    return main, sub.strip() or None

@@ -10,7 +10,7 @@ Shelfwise is a self-hosted book manager. You upload e-book files, it finds their
   - You review the matches side by side, edit any field and confirm
   - Files get a standard name, e.g. `Frank Herbert/Frank Herbert - Dune (1965).epub`, and you can change the template
   - Flags files that are already in your library
-- **Metadata sources**: Google Books, Open Library, WorldCat (OCLC), Crossref. Matching records are merged into a "Combined" result
+- **Metadata sources**: Google Books, Hardcover, Open Library, Apple Books, KB (Dutch national library), DNB (German national library), WorldCat (OCLC), Crossref and OpenAlex. Records for the same book are merged into one "Combined" result. The review screen shows what each source returned, or why it failed
 - **ISBN tools**: checksum validation, conversion between ISBN-10 and ISBN-13, ISBN search
 - **Library**: search by title, author, ISBN, series or publisher; sort and filter by format; grid or list view; edit metadata, replace covers, download
 - **Multiple users**: each user has their own library. The first account becomes the administrator, and admins can manage users. Registration can be turned off
@@ -52,7 +52,10 @@ Set all options with environment variables in `.env`. See [`.env.example`](.env.
 | `SHELFWISE_ADMIN_USERNAME` / `_EMAIL` / `_PASSWORD` | — | Creates an admin account on startup |
 | `SHELFWISE_GOOGLE_BOOKS_API_KEY` | — | Recommended. Without a key, Google limits requests heavily |
 | `SHELFWISE_WORLDCAT_CLIENT_ID` / `_SECRET` | — | OCLC WSKey with the `wcapi` scope. WorldCat is off without it |
-| `SHELFWISE_CROSSREF_MAILTO` | — | Contact email for Crossref's faster "polite" pool |
+| `SHELFWISE_CROSSREF_MAILTO` | — | Contact email for the faster "polite" pools of Crossref and OpenAlex |
+| `SHELFWISE_HARDCOVER_API_TOKEN` | — | Free token from hardcover.app (account → API). Adds series details. Hardcover is off without it |
+| `SHELFWISE_OPENALEX_API_KEY` | — | Optional free key. Without one, OpenAlex uses a small budget shared by everyone on your IP address |
+| `SHELFWISE_APPLE_BOOKS_COUNTRY` | `us` | Apple Books store to search, e.g. `nl` or `de` |
 
 ## Development
 
@@ -87,7 +90,7 @@ backend/app/
   routers/             auth, users, books, uploads, metadata
   services/extract.py  EPUB/PDF/file-name metadata extraction
   services/isbn.py     ISBN validation and conversion
-  services/metadata/   Google Books, Open Library, WorldCat, Crossref
+  services/metadata/   one module per metadata source, plus ranking/merging
   services/storage.py  file naming and library storage
 frontend/src/
   pages/               Library, BookDetail, Upload, Review, Admin, Settings, Login

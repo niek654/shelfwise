@@ -28,7 +28,10 @@ class Settings(BaseSettings):
     google_books_api_key: Optional[str] = None
     worldcat_client_id: Optional[str] = None
     worldcat_client_secret: Optional[str] = None
-    crossref_mailto: Optional[str] = None
+    crossref_mailto: Optional[str] = None  # also sent to OpenAlex
+    hardcover_api_token: Optional[str] = None
+    openalex_api_key: Optional[str] = None
+    apple_books_country: str = "us"
     metadata_timeout: float = 10.0
 
     static_dir: Path = Path(__file__).resolve().parent.parent / "static"

@@ -13,14 +13,22 @@ from ...config import get_settings
 from ...schemas import BookMetadata
 from .. import isbn as isbn_utils
 from .base import USER_AGENT, Provider
+from .apple_books import AppleBooks
 from .crossref import Crossref
 from .google_books import GoogleBooks
+from .hardcover import Hardcover, HardcoverError
+from .national_libraries import DNB, KB
 from .open_library import OpenLibrary
+from .openalex import OpenAlex
 from .worldcat import WorldCat
 
 log = logging.getLogger(__name__)
 
-PROVIDERS: List[Provider] = [GoogleBooks(), OpenLibrary(), WorldCat(), Crossref()]
+# Order is priority: when records are merged, earlier providers win for each field.
+PROVIDERS: List[Provider] = [
+    GoogleBooks(), Hardcover(), OpenLibrary(), AppleBooks(), KB(), DNB(), WorldCat(), Crossref(), OpenAlex(),
+]
+COVER_PRIORITY = ["apple_books", "hardcover", "google_books", "open_library"]
 MERGE_FIELDS = [
     "subtitle", "publisher", "published_date", "isbn10", "isbn13", "doi", "language",
     "description", "page_count", "cover_url", "series", "series_index",
@@ -44,10 +52,14 @@ def provider_note(provider: Provider) -> Optional[str]:
         return "No API key: uses Google's shared anonymous quota, which is usually exhausted"
     if isinstance(provider, WorldCat) and not provider.enabled():
         return "Needs OCLC WSKey credentials"
+    if isinstance(provider, Hardcover) and not provider.enabled():
+        return "Needs a free API token from hardcover.app"
     return None
 
 
 def _describe_error(provider: Provider, exc: Exception) -> str:
+    if isinstance(exc, HardcoverError):
+        return f"API error: {exc}"
     if isinstance(exc, httpx.HTTPStatusError):
         code = exc.response.status_code
         if code == 429:
@@ -81,6 +93,17 @@ def _similar(a: str, b: str) -> bool:
     return bool(a and b) and (a == b or difflib.SequenceMatcher(None, a, b).ratio() >= 0.85)
 
 
+def _surnames(meta: BookMetadata) -> set:
+    return {re.sub(r"[^a-z]", "", a.lower().split()[-1]) for a in meta.authors if a.split()}
+
+
+def _same_work(a: BookMetadata, b: BookMetadata) -> bool:
+    if not _similar(a.title, b.title):
+        return False
+    sa, sb = _surnames(a), _surnames(b)
+    return not sa or not sb or bool(sa & sb)
+
+
 def _merge(group: List[BookMetadata]) -> BookMetadata:
     """Combine several records for the same ISBN, preferring earlier (higher-priority) sources."""
     merged = group[0].model_copy(deep=True)
@@ -95,6 +118,12 @@ def _merge(group: List[BookMetadata]) -> BookMetadata:
         # Longer descriptions are usually more useful.
         if other.description and len(other.description) > len(merged.description or "") * 2:
             merged.description = other.description
+    # Cover quality differs a lot by source; pick the sharpest available.
+    for source in COVER_PRIORITY:
+        cover = next((g.cover_url for g in group if g.source == source and g.cover_url), None)
+        if cover:
+            merged.cover_url = cover
+            break
     merged.source = "combined"
     merged.source_id = None
     merged.source_url = None
@@ -135,12 +164,12 @@ async def lookup(
                         m.isbn10 = m.isbn10 or isbn_utils.to_isbn10(isbn13)
                         found[p.name].append(m)
         if doi:
-            crossref = next((p for p in providers if isinstance(p, Crossref)), None)
-            if crossref:
-                results, error = await _safe(crossref, crossref.by_doi(client, doi))
-                found[crossref.name] += results
+            doi_providers = [p for p in providers if isinstance(p, (Crossref, OpenAlex))]
+            batches = await asyncio.gather(*(_safe(p, p.by_doi(client, doi)) for p in doi_providers))
+            for p, (results, error) in zip(doi_providers, batches):
+                found[p.name] += results
                 if error:
-                    errors[crossref.name] = error
+                    errors[p.name] = error
 
         exact = [m for p in providers for m in found[p.name]]
         search_title = exact[0].title if exact else title
@@ -177,8 +206,13 @@ async def lookup(
 
     groups: Dict[str, List[BookMetadata]] = {}
     for r in ordered:
-        if r.title:
-            groups.setdefault(_key(r), []).append(r)
+        if not r.title:
+            continue
+        key = _key(r)
+        if not r.isbn13:
+            # Sources without ISBNs (Apple Books, OpenAlex) join the record for the same work.
+            key = next((k for k, g in groups.items() if _same_work(g[0], r)), key)
+        groups.setdefault(key, []).append(r)
     ranked: List[BookMetadata] = []
     for group in groups.values():
         if len({g.source for g in group}) > 1:
