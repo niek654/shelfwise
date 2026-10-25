@@ -39,6 +39,7 @@ class FakeCrossref(Crossref):
 
 def test_fallback_search_and_statuses(monkeypatch):
     monkeypatch.setattr(metadata, "PROVIDERS", [RateLimitedGoogle(), FakeOpenLibrary(), FakeCrossref()])
+    monkeypatch.setattr(metadata, "disabled_providers", lambda: set())
     outcome = asyncio.run(metadata.lookup(isbn=ISBN, title="pragprog draft"))
 
     # Crossref had no ISBN hit, so it was searched by the title of the ISBN match, not the file's junk title.
@@ -53,3 +54,19 @@ def test_fallback_search_and_statuses(monkeypatch):
     assert "GOOGLE_BOOKS_API_KEY" in status["google_books"]["message"]
     assert status["open_library"]["status"] == "ok"
     assert status["crossref"]["status"] == "ok"
+
+
+def test_explicit_title_search_and_switched_off(monkeypatch):
+    monkeypatch.setattr(metadata, "PROVIDERS", [RateLimitedGoogle(), FakeOpenLibrary(), FakeCrossref()])
+    monkeypatch.setattr(metadata, "disabled_providers", lambda: {"google_books"})
+    outcome = asyncio.run(metadata.lookup(isbn=ISBN, title="Programming Pearls", title_search=True))
+
+    # The typed title is searched as-is, and its results are kept even though they differ from the ISBN match.
+    assert FakeCrossref.searched == ("Programming Pearls", None)
+    titles = [c.title for c in outcome.candidates]
+    assert titles[0] == "The Pragmatic Programmer"
+    assert "Programming Pearls" in titles
+
+    status = {p["name"]: p for p in outcome.providers}
+    assert status["google_books"]["status"] == "disabled"
+    assert status["google_books"]["message"] == "Turned off in settings"

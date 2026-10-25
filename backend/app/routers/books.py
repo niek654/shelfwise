@@ -1,17 +1,20 @@
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from sqlalchemy import String, cast, func, or_, select
 from sqlalchemy.orm import Session
 
 from ..auth import get_current_user
 from ..db import get_db
 from ..models import Book, User
-from ..schemas import BookOut, BookPage, BookUpdate
-from ..services import library, storage
+from ..schemas import BookMetadata, BookOut, BookPage, BookUpdate
+from ..services import extract, library, storage
 
 router = APIRouter(prefix="/api/books", tags=["books"])
+
+# cover_url value meaning "use the cover embedded in the book file".
+FILE_COVER = "file"
 
 SORTS = {
     "added": Book.created_at.desc(),
@@ -90,13 +93,52 @@ async def update_book(
     library.apply_metadata(book, body, only_set=True)
     if not book.title:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Title is required")
-    if body.cover_url:
+    if body.cover_url == FILE_COVER:
+        _, cover = _read_file(book)
+        if cover:
+            library.set_cover_from_bytes(book, *cover)
+    elif body.cover_url:
         await library.set_cover_from_url(book, body.cover_url)
     if body.rename_file:
         new_rel = storage.render_name(library.book_metadata(book), book.file_format)
         book.file_path = storage.relocate(book.file_path, new_rel)
     db.commit()
     return library.to_out(book)
+
+
+def _read_file(book: Book):
+    path = storage.library_path(book.file_path)
+    if not path.exists():
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "File missing from library")
+    return extract.extract(path, book.original_filename)
+
+
+@router.get("/{book_id}/file-metadata", response_model=BookMetadata)
+def file_metadata(book_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Metadata embedded in the stored file itself (EPUB/PDF), as an alternative to online sources."""
+    hints, cover = _read_file(get_book(book_id, user, db))
+    return BookMetadata(
+        title=hints.get("title") or "",
+        authors=hints.get("authors") or [],
+        publisher=hints.get("publisher"),
+        published_date=hints.get("published_date"),
+        language=hints.get("language"),
+        description=hints.get("description"),
+        isbn13=(hints.get("isbns") or [None])[0],
+        doi=hints.get("doi"),
+        series=hints.get("series"),
+        series_index=hints.get("series_index"),
+        cover_url=FILE_COVER if cover else None,
+        source="file",
+    )
+
+
+@router.get("/{book_id}/file-cover")
+def file_cover(book_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    _, cover = _read_file(get_book(book_id, user, db))
+    if not cover:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "The file has no embedded cover")
+    return Response(content=cover[0], media_type=cover[1])
 
 
 @router.delete("/{book_id}", status_code=204)

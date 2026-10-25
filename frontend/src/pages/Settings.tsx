@@ -1,15 +1,46 @@
 import { FormEvent, useState } from "react";
-import { Check, Monitor, Moon, Sun, X } from "lucide-react";
+import { Monitor, Moon, Sun } from "lucide-react";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { Theme, useTheme } from "../lib/theme";
 import { useToast } from "../lib/toast";
 
+function Switch({ checked, disabled, label, onChange }: { checked: boolean; disabled?: boolean; label: string; onChange: (v: boolean) => void }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+      className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 disabled:cursor-not-allowed disabled:opacity-50 ${
+        checked ? "bg-brand-600" : "bg-ink-300 dark:bg-ink-700"
+      }`}
+    >
+      <span className={`inline-block h-5 w-5 rounded-full bg-white shadow transition ${checked ? "translate-x-[22px]" : "translate-x-0.5"}`} />
+    </button>
+  );
+}
+
 export default function Settings() {
-  const { user, config } = useAuth();
+  const { user, config, refreshConfig } = useAuth();
   const { theme, setTheme } = useTheme();
   const toast = useToast();
   const [pw, setPw] = useState({ current_password: "", new_password: "" });
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const toggleProvider = async (name: string, enabled: boolean) => {
+    setBusy(name);
+    try {
+      await api("/api/settings/providers", { method: "PUT", json: { name, enabled } });
+      await refreshConfig();
+    } catch (err) {
+      toast((err as Error).message, "error");
+    } finally {
+      setBusy(null);
+    }
+  };
 
   const changePassword = async (e: FormEvent) => {
     e.preventDefault();
@@ -67,22 +98,26 @@ export default function Settings() {
 
       <section className="card p-4 sm:p-6">
         <h2 className="font-medium">Metadata sources</h2>
-        <ul className="mt-3 space-y-2">
+        <p className="mt-1 text-sm text-ink-500 dark:text-ink-400">
+          {user?.is_admin ? "Choose which sources are searched for every user." : "Only an administrator can change these."}
+        </p>
+        <ul className="mt-4 divide-y divide-ink-100 dark:divide-ink-800">
           {config?.providers.map((p) => (
-            <li key={p.name} className="flex items-center justify-between gap-3 text-sm">
+            <li key={p.name} className="flex items-center justify-between gap-3 py-2.5 text-sm">
               <span className="min-w-0">
                 {p.label}
-                {p.enabled && p.note && <span className="block text-xs text-amber-600 dark:text-amber-400">{p.note}</span>}
+                {!p.enabled ? (
+                  <span className="block text-xs text-ink-500 dark:text-ink-400">{p.note ?? "Needs API credentials"}</span>
+                ) : (
+                  p.active && p.note && <span className="block text-xs text-amber-600 dark:text-amber-400">{p.note}</span>
+                )}
               </span>
-              {p.enabled ? (
-                <span className="badge gap-1 bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400">
-                  <Check className="h-3 w-3" /> Enabled
-                </span>
-              ) : (
-                <span className="badge gap-1 bg-ink-100 text-ink-500 dark:bg-ink-800 dark:text-ink-400">
-                  <X className="h-3 w-3" /> Needs API credentials
-                </span>
-              )}
+              <Switch
+                checked={p.active}
+                disabled={!user?.is_admin || !p.enabled || busy === p.name}
+                label={`${p.label} ${p.active ? "on" : "off"}`}
+                onChange={(on) => toggleProvider(p.name, on)}
+              />
             </li>
           ))}
         </ul>

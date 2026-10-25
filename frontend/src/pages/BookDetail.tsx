@@ -5,7 +5,8 @@ import { api, authUrl, Book, BookMetadata, formatBytes, LookupResult, ProviderSt
 import { useToast } from "../lib/toast";
 import BookCover from "../components/BookCover";
 import LookupPanel from "../components/LookupPanel";
-import MetadataForm from "../components/MetadataForm";
+import CoverPicker, { coverOptions } from "../components/CoverPicker";
+import MetadataForm, { applyMatch } from "../components/MetadataForm";
 import ProviderStatusList from "../components/ProviderStatusList";
 
 function Detail({ label, value, mono }: { label: string; value?: string | number | null; mono?: boolean }) {
@@ -29,6 +30,14 @@ export default function BookDetail() {
   const [matches, setMatches] = useState<BookMetadata[]>([]);
   const [statuses, setStatuses] = useState<ProviderStatus[]>([]);
   const [picked, setPicked] = useState<number | null>(null);
+  const [fileMeta, setFileMeta] = useState<BookMetadata | null>(null);
+
+  useEffect(() => {
+    if (!editing || fileMeta || !book) return;
+    api<BookMetadata>(`/api/books/${book.id}/file-metadata`)
+      .then((m) => setFileMeta(m.title || m.authors.length || m.isbn13 ? m : null))
+      .catch(() => undefined);
+  }, [editing, fileMeta, book]);
 
   useEffect(() => {
     api<Book>(`/api/books/${id}`)
@@ -48,6 +57,8 @@ export default function BookDetail() {
     );
   }
 
+  // The file's own metadata is always offered next to the online matches.
+  const cards = [...(fileMeta ? [fileMeta] : []), ...matches];
   const coverSrc = book.has_cover ? authUrl(`/api/books/${book.id}/cover?v=${book.updated_at}`) : null;
 
   const save = async () => {
@@ -133,25 +144,36 @@ export default function BookDetail() {
                   <ProviderStatusList providers={statuses} />
                 </div>
               )}
-              {matches.length > 0 && (
+              {cards.length > 0 && (
                 <div className="mb-6 flex gap-3 overflow-x-auto pb-2">
-                  {matches.map((m, i) => (
+                  {cards.map((m, i) => (
                     <button
                       key={i}
                       onClick={() => {
-                        setEditing({ ...m, cover_url: m.cover_url });
+                        setEditing(applyMatch(editing, m));
                         setPicked(i);
                       }}
                       className={`card w-36 shrink-0 p-2 text-left hover:border-brand-400 ${picked === i ? "border-brand-500 ring-2 ring-brand-500/30" : ""}`}
                     >
-                      <BookCover src={m.cover_url} title={m.title} className="w-full" />
+                      <BookCover src={m.cover_url === "file" ? authUrl(`/api/books/${book.id}/file-cover`) : m.cover_url} title={m.title} className="w-full" />
                       <p className="mt-2 line-clamp-2 text-xs font-medium">{m.title}</p>
                       <p className="truncate text-[11px] text-ink-500">{SOURCE_LABELS[m.source ?? ""] ?? m.source}</p>
                     </button>
                   ))}
                 </div>
               )}
-              <MetadataForm value={editing} onChange={setEditing} seriesSuggestions={matches.map((m) => m.series ?? "")} />
+              <div className="mb-6">
+                <CoverPicker
+                  options={[
+                    ...(coverSrc ? [{ value: null, src: coverSrc, label: "Current" }] : []),
+                    ...(fileMeta?.cover_url ? [{ value: "file", src: authUrl(`/api/books/${book.id}/file-cover`), label: "From file" }] : []),
+                    ...coverOptions(matches),
+                  ]}
+                  value={editing.cover_url}
+                  onChange={(cover_url) => setEditing({ ...editing, cover_url })}
+                />
+              </div>
+              <MetadataForm value={editing} onChange={setEditing} alternatives={[...matches, ...(fileMeta ? [fileMeta] : [])]} />
               <div className="mt-6 flex justify-end gap-2">
                 <button className="btn-ghost" onClick={() => (setEditing(null), setMatches([]), setStatuses([]), setPicked(null))}>
                   <X className="h-4 w-4" /> Cancel

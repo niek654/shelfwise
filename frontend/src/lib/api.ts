@@ -105,7 +105,11 @@ export interface LookupResult {
 export interface Provider {
   name: string;
   label: string;
+  /** Configured: required API keys are present. */
   enabled: boolean;
+  /** Configured and not switched off by an administrator. */
+  active: boolean;
+  switched_off: boolean;
   note: string | null;
 }
 

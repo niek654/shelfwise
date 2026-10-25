@@ -158,7 +158,9 @@ async def relookup(
     upload = _get_upload(upload_id, user, db)
     if not any([body.isbn, body.title, body.doi]):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Provide an ISBN, DOI or title")
-    outcome = await metadata.lookup(isbn=body.isbn, doi=body.doi, title=body.title, author=body.author)
+    outcome = await metadata.lookup(
+        isbn=body.isbn, doi=body.doi, title=body.title, author=body.author, title_search=True
+    )
     upload.candidates = [c.model_dump() for c in outcome.candidates]
     upload.extracted = {**upload.extracted, "lookup": outcome.providers}
     db.commit()

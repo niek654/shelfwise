@@ -5,7 +5,8 @@ import { api, authUrl, BookMetadata, SOURCE_LABELS, Upload, year } from "../lib/
 import { useAuth } from "../lib/auth";
 import { useToast } from "../lib/toast";
 import BookCover from "../components/BookCover";
-import MetadataForm, { previewFilename } from "../components/MetadataForm";
+import CoverPicker, { coverOptions } from "../components/CoverPicker";
+import MetadataForm, { applyMatch, previewFilename } from "../components/MetadataForm";
 import LookupPanel from "../components/LookupPanel";
 import ProviderStatusList from "../components/ProviderStatusList";
 import { Steps } from "./UploadPage";
@@ -73,7 +74,7 @@ export default function Review() {
 
   const choose = (i: number) => {
     setSelected(i);
-    setMeta({ ...choices[i] });
+    setMeta(applyMatch(meta, choices[i]));
   };
 
   const relookup = async (query: { isbn?: string; title?: string; author?: string }) => {
@@ -206,7 +207,17 @@ export default function Review() {
               )}
             </div>
           </div>
-          <MetadataForm value={meta} onChange={setMeta} seriesSuggestions={choices.map((c) => c.series ?? "")} />
+          <div className="mb-6">
+            <CoverPicker
+              options={[
+                ...(embeddedCover ? [{ value: "embedded", src: embeddedCover, label: "From file" }] : []),
+                ...coverOptions(upload.candidates),
+              ]}
+              value={meta.cover_url}
+              onChange={(cover_url) => setMeta({ ...meta, cover_url })}
+            />
+          </div>
+          <MetadataForm value={meta} onChange={setMeta} alternatives={choices} />
           <div className="sticky bottom-20 mt-6 flex flex-col-reverse gap-2 border-t border-ink-100 bg-white pt-4 sm:bottom-0 sm:flex-row sm:justify-end dark:border-ink-800 dark:bg-ink-900">
             <button className="btn-ghost text-red-600 dark:text-red-400" onClick={discard}>
               Discard

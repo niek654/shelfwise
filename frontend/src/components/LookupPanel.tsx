@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useState } from "react";
-import { Loader2, Search } from "lucide-react";
+import { Loader2, Search, X } from "lucide-react";
 
 export interface LookupQuery {
   isbn: string;
@@ -13,6 +13,29 @@ interface Props {
   className?: string;
 }
 
+function ClearableInput({
+  value,
+  onChange,
+  className = "",
+  ...rest
+}: { value: string; onChange: (v: string) => void; className?: string; placeholder: string; inputMode?: "numeric" }) {
+  return (
+    <div className="relative">
+      <input className={`input pr-8 ${className}`} value={value} onChange={(e) => onChange(e.target.value)} {...rest} />
+      {value && (
+        <button
+          type="button"
+          onClick={() => onChange("")}
+          aria-label={`Clear ${rest.placeholder}`}
+          className="absolute inset-y-0 right-0 flex w-8 items-center justify-center text-ink-400 hover:text-ink-700 dark:hover:text-ink-200"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      )}
+    </div>
+  );
+}
+
 /** Search box for online metadata: by ISBN, or by title and author. */
 export default function LookupPanel({ initial, onSearch, className = "" }: Props) {
   const [query, setQuery] = useState(initial);
@@ -24,7 +47,12 @@ export default function LookupPanel({ initial, onSearch, className = "" }: Props
     e.preventDefault();
     setBusy(true);
     try {
-      await onSearch(query.isbn.trim() ? { isbn: query.isbn.trim() } : { title: query.title.trim(), author: query.author.trim() || undefined });
+      // Send everything that is filled in: an ISBN and a typed title are both searched.
+      await onSearch({
+        isbn: query.isbn.trim() || undefined,
+        title: query.title.trim() || undefined,
+        author: query.author.trim() || undefined,
+      });
     } finally {
       setBusy(false);
     }
@@ -33,20 +61,20 @@ export default function LookupPanel({ initial, onSearch, className = "" }: Props
   return (
     <form onSubmit={submit} className={`card space-y-3 p-4 ${className}`}>
       <p className="text-sm font-medium">Search online</p>
-      <input
-        className="input font-mono"
+      <ClearableInput
+        className="font-mono"
         placeholder="ISBN"
         inputMode="numeric"
         value={query.isbn}
-        onChange={(e) => setQuery({ ...query, isbn: e.target.value })}
+        onChange={(isbn) => setQuery({ ...query, isbn })}
       />
-      <div className="flex items-center gap-2 text-xs text-ink-400">
-        <span className="h-px flex-1 bg-ink-200 dark:bg-ink-800" /> or <span className="h-px flex-1 bg-ink-200 dark:bg-ink-800" />
-      </div>
       <div className="grid grid-cols-2 gap-2">
-        <input className="input" placeholder="Title" value={query.title} onChange={(e) => setQuery({ ...query, title: e.target.value, isbn: "" })} />
-        <input className="input" placeholder="Author" value={query.author} onChange={(e) => setQuery({ ...query, author: e.target.value, isbn: "" })} />
+        <ClearableInput placeholder="Title" value={query.title} onChange={(title) => setQuery({ ...query, title })} />
+        <ClearableInput placeholder="Author" value={query.author} onChange={(author) => setQuery({ ...query, author })} />
       </div>
+      <p className="text-xs text-ink-500 dark:text-ink-400">
+        Fill in an ISBN, a title, or both. Exact ISBN matches are listed first. Clear the ISBN to search by title only.
+      </p>
       <button className="btn-secondary w-full" disabled={busy || !(query.isbn.trim() || query.title.trim())}>
         {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />} Look up
       </button>

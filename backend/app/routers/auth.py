@@ -1,14 +1,23 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
+from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from .. import __version__
-from ..auth import authenticate, create_access_token, get_current_user, hash_password, verify_password
+from ..auth import (
+    authenticate,
+    create_access_token,
+    get_current_user,
+    hash_password,
+    require_admin,
+    verify_password,
+)
 from ..config import get_settings
 from ..db import get_db
 from ..models import User
 from ..schemas import LoginIn, PasswordChange, RegisterIn, Token, UserOut
+from ..services import app_settings
 from ..services.metadata import PROVIDERS, provider_note
 
 router = APIRouter(prefix="/api", tags=["auth"])
@@ -18,15 +27,41 @@ router = APIRouter(prefix="/api", tags=["auth"])
 def public_config(db: Session = Depends(get_db)):
     settings = get_settings()
     has_users = db.scalar(select(func.count(User.id))) > 0
+    disabled = set(app_settings.get(db, app_settings.DISABLED_PROVIDERS, []))
     return {
         "version": __version__,
         "allow_registration": settings.allow_registration or not has_users,
         "needs_setup": not has_users,
         "providers": [
-            {"name": p.name, "label": p.label, "enabled": p.enabled(), "note": provider_note(p)} for p in PROVIDERS
+            {
+                "name": p.name,
+                "label": p.label,
+                "enabled": p.enabled(),  # configured (API keys present)
+                "active": p.enabled() and p.name not in disabled,  # configured and not switched off
+                "switched_off": p.name in disabled,
+                "note": provider_note(p),
+            }
+            for p in PROVIDERS
         ],
         "filename_template": settings.filename_template,
     }
+
+
+class ProviderToggle(BaseModel):
+    name: str
+    enabled: bool
+
+
+@router.put("/settings/providers", status_code=204, dependencies=[Depends(require_admin)])
+def toggle_provider(body: ProviderToggle, db: Session = Depends(get_db)):
+    if body.name not in {p.name for p in PROVIDERS}:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Unknown metadata source")
+    disabled = set(app_settings.get(db, app_settings.DISABLED_PROVIDERS, []))
+    if body.enabled:
+        disabled.discard(body.name)
+    else:
+        disabled.add(body.name)
+    app_settings.put(db, app_settings.DISABLED_PROVIDERS, sorted(disabled))
 
 
 @router.post("/auth/token", response_model=Token, include_in_schema=False)

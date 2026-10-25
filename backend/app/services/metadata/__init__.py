@@ -5,12 +5,14 @@ import difflib
 import logging
 import re
 from dataclasses import dataclass, field
-from typing import Awaitable, Dict, List, Optional, Tuple
+from typing import Awaitable, Dict, List, Optional, Set, Tuple
 
 import httpx
 
 from ...config import get_settings
+from ...db import SessionLocal
 from ...schemas import BookMetadata
+from .. import app_settings
 from .. import isbn as isbn_utils
 from .base import USER_AGENT, Provider
 from .apple_books import AppleBooks
@@ -42,8 +44,15 @@ class LookupOutcome:
     providers: List[dict] = field(default_factory=list)
 
 
-def active_providers() -> List[Provider]:
-    return [p for p in PROVIDERS if p.enabled()]
+def disabled_providers() -> Set[str]:
+    """Providers an administrator switched off (stored in the database)."""
+    with SessionLocal() as db:
+        return set(app_settings.get(db, app_settings.DISABLED_PROVIDERS, []))
+
+
+def active_providers(disabled: Optional[Set[str]] = None) -> List[Provider]:
+    disabled = disabled_providers() if disabled is None else disabled
+    return [p for p in PROVIDERS if p.enabled() and p.name not in disabled]
 
 
 def provider_note(provider: Provider) -> Optional[str]:
@@ -140,10 +149,15 @@ async def lookup(
     title: Optional[str] = None,
     author: Optional[str] = None,
     limit: int = 5,
+    title_search: bool = False,
 ) -> LookupOutcome:
     """Look up by ISBN and/or DOI first. Providers without an exact hit then get a
-    title/author search, using the title of the best identifier match when there is one."""
-    providers = active_providers()
+    title/author search, using the title of the best identifier match when there is one.
+
+    With `title_search` (a title the user typed), every provider is also searched by that
+    title, and those results are kept even when they differ from the identifier match."""
+    disabled = disabled_providers()
+    providers = active_providers(disabled)
     settings = get_settings()
     found: Dict[str, List[BookMetadata]] = {p.name: [] for p in providers}
     errors: Dict[str, str] = {}
@@ -172,9 +186,10 @@ async def lookup(
                     errors[p.name] = error
 
         exact = [m for p in providers for m in found[p.name]]
-        search_title = exact[0].title if exact else title
-        search_author = (exact[0].authors or [None])[0] if exact else author
-        pending = [p for p in providers if not found[p.name] and p.name not in errors]
+        explicit = title_search and bool(title)
+        search_title = title if explicit or not exact else exact[0].title
+        search_author = author if explicit or not exact else (exact[0].authors or [None])[0]
+        pending = [p for p in providers if (explicit or not found[p.name]) and p.name not in errors]
         if search_title and pending:
             batches = await asyncio.gather(
                 *(_safe(p, p.search(client, search_title, search_author, limit)) for p in pending)
@@ -183,12 +198,14 @@ async def lookup(
                 if error:
                     errors[p.name] = error
                 # With an identifier match in hand, only keep the same work (other editions).
-                found[p.name] = [r for r in results if not exact or _similar(r.title, search_title)]
+                found[p.name] += [r for r in results if explicit or not exact or _similar(r.title, search_title)]
 
     statuses = []
     for p in PROVIDERS:
         if not p.enabled():
             status, message = "disabled", provider_note(p)
+        elif p.name in disabled:
+            status, message = "disabled", "Turned off in settings"
         elif p.name in errors and not found[p.name]:
             status, message = "error", errors[p.name]
         elif found[p.name]:

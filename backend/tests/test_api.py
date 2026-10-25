@@ -104,6 +104,15 @@ def test_full_flow(client, data_dir, fake_lookup):
     assert client.get("/api/books?q=9780441013593", headers=auth(alice)).json()["total"] == 1
     assert client.get("/api/books", headers=auth(bob)).json()["total"] == 0
 
+    # Metadata and cover read back from the stored file
+    fm = client.get(f"/api/books/{book['id']}/file-metadata", headers=auth(alice)).json()
+    assert (fm["title"], fm["authors"], fm["isbn13"], fm["source"], fm["cover_url"]) == (
+        "Dune", ["Frank Herbert"], "9780441013593", "file", "file",
+    )
+    assert client.get(f"/api/books/{book['id']}/file-cover", headers=auth(alice)).content.startswith(b"\xff\xd8")
+    r = client.patch(f"/api/books/{book['id']}", headers=auth(alice), json={"cover_url": "file", "rename_file": False})
+    assert r.status_code == 200 and r.json()["has_cover"] is True
+
     # Edit renames the file
     r = client.patch(f"/api/books/{book['id']}", headers=auth(alice), json={"title": "Dune Messiah", "published_date": "1969"})
     assert r.status_code == 200, r.text
@@ -121,6 +130,14 @@ def test_full_flow(client, data_dir, fake_lookup):
 
     # Admin endpoints
     assert client.get("/api/users", headers=auth(bob)).status_code == 403
+    toggle = {"name": "crossref", "enabled": False}
+    assert client.put("/api/settings/providers", headers=auth(bob), json=toggle).status_code == 403
+    assert client.put("/api/settings/providers", headers=auth(alice), json=toggle).status_code == 204
+    crossref = next(p for p in client.get("/api/config").json()["providers"] if p["name"] == "crossref")
+    assert crossref["active"] is False and crossref["switched_off"] is True
+    toggle["enabled"] = True
+    client.put("/api/settings/providers", headers=auth(alice), json=toggle)
+    assert next(p for p in client.get("/api/config").json()["providers"] if p["name"] == "crossref")["active"]
     assert len(client.get("/api/users", headers=auth(alice)).json()) == 2
 
     assert client.delete(f"/api/books/{book['id']}", headers=auth(alice)).status_code == 204
