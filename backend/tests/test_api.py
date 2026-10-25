@@ -110,8 +110,13 @@ def test_full_flow(client, data_dir, fake_lookup):
         "Dune", ["Frank Herbert"], "9780441013593", "file", "file",
     )
     assert client.get(f"/api/books/{book['id']}/file-cover", headers=auth(alice)).content.startswith(b"\xff\xd8")
+    version = lambda: client.get(f"/api/books/{book['id']}", headers=auth(alice)).json()["updated_at"]
+    before = version()
     r = client.patch(f"/api/books/{book['id']}", headers=auth(alice), json={"cover_url": "file", "rename_file": False})
     assert r.status_code == 200 and r.json()["has_cover"] is True
+    # Replacing a JPEG cover with another JPEG keeps the file name, so the version used in
+    # cover URLs (updated_at) must still change or browsers keep showing the cached cover.
+    assert version() != before
 
     # Edit renames the file
     r = client.patch(f"/api/books/{book['id']}", headers=auth(alice), json={"title": "Dune Messiah", "published_date": "1969"})

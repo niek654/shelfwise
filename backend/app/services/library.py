@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Optional
 
 from ..config import get_settings
-from ..models import Book
+from ..models import Book, utcnow
 from ..schemas import BookMetadata, BookOut
 from . import isbn as isbn_utils
 from . import storage
@@ -60,6 +60,12 @@ def book_metadata(book: Book) -> BookMetadata:
     return BookMetadata(**{f: getattr(book, f) for f in BOOK_FIELDS})
 
 
+def _touch(book: Book) -> None:
+    """Bump updated_at: it versions cover URLs, and a replaced cover often keeps its file name
+    ({id}.jpg), so without this browsers would keep showing the cached old image."""
+    book.updated_at = utcnow()
+
+
 def cover_file(book: Book) -> Optional[Path]:
     if not book.cover_path:
         return None
@@ -69,7 +75,11 @@ def cover_file(book: Book) -> Optional[Path]:
 async def set_cover_from_url(book: Book, url: str) -> bool:
     name = f"{book.id}.jpg"
     if await storage.download_cover(url, get_settings().cover_dir / name):
+        old = cover_file(book)
+        if old and old.name != name:
+            old.unlink(missing_ok=True)
         book.cover_path = name
+        _touch(book)
         return True
     return False
 
@@ -84,6 +94,7 @@ def set_cover_from_bytes(book: Book, data: bytes, media_type: str = "image/jpeg"
         old.unlink(missing_ok=True)
     (cover_dir / name).write_bytes(data)
     book.cover_path = name
+    _touch(book)
 
 
 def delete_book_files(book: Book) -> None:
