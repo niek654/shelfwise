@@ -179,8 +179,26 @@ def test_series(client):
     series = client.get("/api/series", headers=auth(token)).json()
     assert series == [{
         "name": "Stormlight Archive", "count": 6, "authors": ["Brandon Sanderson"],
-        "cover_book_ids": [], "next_index": "11",
+        "covers": [], "next_index": "11",
     }]
+    # A cover change must change the version the series overview uses for that cover.
+    with SessionLocal() as db:
+        first = db.query(Book).filter_by(title="The Way of Kings").one()
+        first.cover_path = "kings.jpg"
+        db.commit()
+        book_id = first.id
+    cover = lambda: client.get("/api/series", headers=auth(token)).json()[0]["covers"][0]  # noqa: E731
+    before = cover()
+    assert before["book_id"] == book_id
+    from app.services import library
+    with SessionLocal() as db:
+        library.set_cover_from_bytes(db.get(Book, book_id), b"\xff\xd8new", "image/jpeg")
+        db.commit()
+    assert cover()["version"] != before["version"]
+    with SessionLocal() as db:
+        db.get(Book, book_id).cover_path = None
+        db.commit()
+
     books = client.get("/api/series/books", params={"name": "Stormlight Archive"}, headers=auth(token)).json()
     assert [b["title"] for b in books] == [
         "The Way of Kings", "Words of Radiance", "Edgedancer", "Oathbringer", "Rhythm of War", "Art book",

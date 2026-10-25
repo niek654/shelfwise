@@ -102,7 +102,7 @@ export interface SeriesSummary {
   name: string;
   count: number;
   authors: string[];
-  cover_book_ids: number[];
+  covers: { book_id: number; version: string }[];
   next_index: string | null;
 }
 
@@ -211,6 +211,12 @@ export function uploadFiles(files: File[], onProgress: (fraction: number) => voi
 export function authUrl(path: string): string {
   const t = token.get();
   return t ? `${path}${path.includes("?") ? "&" : "?"}access_token=${encodeURIComponent(t)}` : path;
+}
+
+/** A book's cover URL. `version` (the book's updated_at) changes whenever the cover does,
+ * so browsers never show a stale cached cover. */
+export function coverUrl(bookId: number, version: string): string {
+  return authUrl(`/api/books/${bookId}/cover?v=${encodeURIComponent(version)}`);
 }
 
 export function formatBytes(n: number): string {

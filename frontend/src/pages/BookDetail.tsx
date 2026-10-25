@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Download, ImagePlus, Loader2, Pencil, Trash2, X } from "lucide-react";
-import { api, authUrl, Book, BookMetadata, formatBytes, LookupResult, ProviderStatus, SOURCE_LABELS, year } from "../lib/api";
+import { api, authUrl, coverUrl, Book, BookMetadata, formatBytes, LookupResult, ProviderStatus, SOURCE_LABELS, year } from "../lib/api";
 import { useToast } from "../lib/toast";
 import BookCover from "../components/BookCover";
 import LookupPanel from "../components/LookupPanel";
@@ -59,7 +59,7 @@ export default function BookDetail() {
 
   // The file's own metadata is always offered next to the online matches.
   const cards = [...(fileMeta ? [fileMeta] : []), ...matches];
-  const coverSrc = book.has_cover ? authUrl(`/api/books/${book.id}/cover?v=${book.updated_at}`) : null;
+  const coverSrc = book.has_cover ? coverUrl(book.id, book.updated_at) : null;
 
   const save = async () => {
     if (!editing) return;

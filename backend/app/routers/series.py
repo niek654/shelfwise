@@ -15,11 +15,17 @@ from ..services import library, storage
 router = APIRouter(prefix="/api/series", tags=["series"])
 
 
+class SeriesCover(BaseModel):
+    book_id: int
+    # Same version as the book's cover URL (?v=updated_at), so a changed cover isn't served from cache.
+    version: str
+
+
 class SeriesOut(BaseModel):
     name: str
     count: int
     authors: List[str]
-    cover_book_ids: List[int]
+    covers: List[SeriesCover]
     next_index: Optional[str]
 
 
@@ -58,7 +64,7 @@ def list_series(user: User = Depends(get_current_user), db: Session = Depends(ge
                 name=name,
                 count=len(books),
                 authors=sorted(authors, key=lambda a: -authors[a])[:2],
-                cover_book_ids=[b.id for b in books if b.cover_path][:3],
+                covers=[SeriesCover(book_id=b.id, version=b.updated_at.isoformat()) for b in books if b.cover_path][:3],
                 next_index=_next_index(books),
             )
         )

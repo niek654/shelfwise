@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Check, Loader2, Pencil, X } from "lucide-react";
-import { api, authUrl, Book, SeriesSummary, year } from "../lib/api";
+import { api, coverUrl, Book, SeriesSummary, year } from "../lib/api";
 import { useToast } from "../lib/toast";
 import BookCover from "../components/BookCover";
 
@@ -118,7 +118,7 @@ export default function SeriesDetail() {
                 {b.series_index || "–"}
               </span>
               <BookCover
-                src={b.has_cover ? authUrl(`/api/books/${b.id}/cover?v=${b.updated_at}`) : null}
+                src={b.has_cover ? coverUrl(b.id, b.updated_at) : null}
                 title={b.title}
                 className="w-12 shrink-0 sm:w-14"
               />

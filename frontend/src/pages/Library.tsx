@@ -3,7 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import {
   BookOpen, CheckCircle2, Circle, LayoutGrid, List, ListChecks, Loader2, Search, SlidersHorizontal, Trash2, Upload, X,
 } from "lucide-react";
-import { api, authUrl, Book, BookPage, Facets, formatBytes, year } from "../lib/api";
+import { api, coverUrl, Book, BookPage, Facets, formatBytes, year } from "../lib/api";
 import { activeFilters, FILTER_KEYS, FilterChips, FilterPanel, Filters } from "../components/LibraryFilters";
 import { useToast } from "../lib/toast";
 import BookCover from "../components/BookCover";
@@ -265,7 +265,7 @@ export default function Library() {
             <BookTile key={b.id} book={b} selecting={selecting} selected={selected.has(b.id)} onToggle={toggle} className="group">
               <div className={`relative rounded-md transition ${selected.has(b.id) ? "ring-4 ring-brand-500 ring-offset-2 ring-offset-ink-50 dark:ring-offset-ink-950" : ""}`}>
                 <BookCover
-                  src={b.has_cover ? authUrl(`/api/books/${b.id}/cover?v=${b.updated_at}`) : null}
+                  src={b.has_cover ? coverUrl(b.id, b.updated_at) : null}
                   title={b.title}
                   author={b.authors[0]}
                   className={`transition ${selecting ? (selected.has(b.id) ? "" : "opacity-80") : "group-hover:-translate-y-1 group-hover:shadow-lg"}`}
@@ -290,7 +290,7 @@ export default function Library() {
             >
               {selecting && <Check selected={selected.has(b.id)} inline className="shrink-0" />}
               <BookCover
-                src={b.has_cover ? authUrl(`/api/books/${b.id}/cover?v=${b.updated_at}`) : null}
+                src={b.has_cover ? coverUrl(b.id, b.updated_at) : null}
                 title={b.title}
                 className="w-10 shrink-0 !rounded"
               />

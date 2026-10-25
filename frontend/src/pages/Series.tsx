@@ -1,27 +1,27 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Layers, Loader2, Search } from "lucide-react";
-import { api, authUrl, SeriesSummary } from "../lib/api";
+import { api, coverUrl, SeriesSummary } from "../lib/api";
 import BookCover from "../components/BookCover";
 
 /** Up to three covers fanned out like a stack of books. */
 function CoverStack({ series }: { series: SeriesSummary }) {
-  const ids = series.cover_book_ids;
-  if (!ids.length) return <BookCover title={series.name} author={series.authors[0]} className="w-full" />;
+  const covers = series.covers;
+  if (!covers.length) return <BookCover title={series.name} author={series.authors[0]} className="w-full" />;
   return (
     <div className="relative aspect-[2/3]">
-      {ids
+      {covers
         .slice()
         .reverse()
-        .map((id, i, all) => {
+        .map((cover, i, all) => {
           const depth = all.length - 1 - i;
           return (
             <div
-              key={id}
+              key={cover.book_id}
               className="absolute inset-0 transition group-hover:translate-x-0"
               style={{ transform: `translate(${depth * 8}%, ${-depth * 3}%) scale(${1 - depth * 0.06})`, zIndex: i }}
             >
-              <BookCover src={authUrl(`/api/books/${id}/cover`)} title={series.name} className="w-full" />
+              <BookCover src={coverUrl(cover.book_id, cover.version)} title={series.name} className="w-full" />
             </div>
           );
         })}
