@@ -1,6 +1,6 @@
 import { ReactNode } from "react";
 import { Link, NavLink, Outlet } from "react-router-dom";
-import { Library, LogOut, Monitor, Moon, Settings, Sun, Upload, Users } from "lucide-react";
+import { Layers, Library, LogOut, Monitor, Moon, Settings, Sun, Upload, Users } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { Theme, useTheme } from "../lib/theme";
 
@@ -42,7 +42,7 @@ function NavItem({ to, icon: Icon, children }: { to: string; icon: typeof Sun; c
       to={to}
       end={to === "/"}
       className={({ isActive }) =>
-        `flex flex-1 flex-col items-center gap-0.5 rounded-lg px-3 py-1.5 text-[11px] font-medium transition sm:flex-none sm:flex-row sm:gap-2 sm:text-sm ${
+        `flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-lg px-1 py-1.5 text-[11px] sm:px-3 font-medium transition sm:flex-none sm:flex-row sm:gap-2 sm:text-sm ${
           isActive
             ? "text-brand-600 sm:bg-brand-50 dark:text-brand-400 sm:dark:bg-brand-500/10"
             : "text-ink-500 hover:text-ink-900 dark:text-ink-400 dark:hover:text-ink-100"
@@ -60,6 +60,7 @@ export default function Layout() {
   const nav = (
     <>
       <NavItem to="/" icon={Library}>Library</NavItem>
+      <NavItem to="/series" icon={Layers}>Series</NavItem>
       <NavItem to="/upload" icon={Upload}>Upload</NavItem>
       {user?.is_admin && <NavItem to="/admin" icon={Users}>Users</NavItem>}
       <NavItem to="/settings" icon={Settings}>Settings</NavItem>

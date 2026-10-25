@@ -1,11 +1,12 @@
-import { FormEvent, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { AlertTriangle, ArrowLeft, Check, ExternalLink, FileText, Loader2, Search } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Check, ExternalLink, FileText, Loader2 } from "lucide-react";
 import { api, authUrl, BookMetadata, SOURCE_LABELS, Upload, year } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { useToast } from "../lib/toast";
 import BookCover from "../components/BookCover";
 import MetadataForm, { previewFilename } from "../components/MetadataForm";
+import LookupPanel from "../components/LookupPanel";
 import ProviderStatusList from "../components/ProviderStatusList";
 import { Steps } from "./UploadPage";
 
@@ -36,8 +37,6 @@ export default function Review() {
   const [upload, setUpload] = useState<Upload | null>(null);
   const [selected, setSelected] = useState(0);
   const [meta, setMeta] = useState<BookMetadata | null>(null);
-  const [search, setSearch] = useState({ isbn: "", title: "", author: "" });
-  const [searching, setSearching] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const options = (u: Upload): BookMetadata[] => [...u.candidates, fromFile(u)];
@@ -53,7 +52,6 @@ export default function Review() {
       setUpload(u);
       setSelected(0);
       setMeta(options(u)[0]);
-      setSearch({ isbn: u.extracted.isbns?.[0] ?? "", title: u.extracted.title ?? "", author: u.extracted.authors?.[0] ?? "" });
     };
     load().catch((e) => toast(e.message, "error"));
     return () => clearTimeout(timer);
@@ -78,14 +76,9 @@ export default function Review() {
     setMeta({ ...choices[i] });
   };
 
-  const relookup = async (e: FormEvent) => {
-    e.preventDefault();
-    setSearching(true);
+  const relookup = async (query: { isbn?: string; title?: string; author?: string }) => {
     try {
-      const u = await api<Upload>(`/api/uploads/${upload.id}/lookup`, {
-        method: "POST",
-        json: search.isbn ? { isbn: search.isbn } : { title: search.title, author: search.author || null },
-      });
+      const u = await api<Upload>(`/api/uploads/${upload.id}/lookup`, { method: "POST", json: query });
       setUpload(u);
       if (u.candidates.length) {
         setSelected(0);
@@ -93,8 +86,6 @@ export default function Review() {
       } else toast("No matches found", "error");
     } catch (err) {
       toast((err as Error).message, "error");
-    } finally {
-      setSearching(false);
     }
   };
 
@@ -158,20 +149,14 @@ export default function Review() {
       <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
         {/* Candidates */}
         <div className="min-w-0 space-y-4">
-          <form onSubmit={relookup} className="card space-y-3 p-4">
-            <p className="text-sm font-medium">Search again</p>
-            <input className="input font-mono" placeholder="ISBN" value={search.isbn} onChange={(e) => setSearch({ ...search, isbn: e.target.value })} />
-            <div className="flex items-center gap-2 text-xs text-ink-400">
-              <span className="h-px flex-1 bg-ink-200 dark:bg-ink-800" /> or <span className="h-px flex-1 bg-ink-200 dark:bg-ink-800" />
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <input className="input" placeholder="Title" value={search.title} onChange={(e) => setSearch({ ...search, title: e.target.value, isbn: "" })} />
-              <input className="input" placeholder="Author" value={search.author} onChange={(e) => setSearch({ ...search, author: e.target.value, isbn: "" })} />
-            </div>
-            <button className="btn-secondary w-full" disabled={searching || !(search.isbn || search.title)}>
-              {searching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />} Look up
-            </button>
-          </form>
+          <LookupPanel
+            initial={{
+              isbn: upload.extracted.isbns?.[0] ?? "",
+              title: upload.extracted.title ?? "",
+              author: upload.extracted.authors?.[0] ?? "",
+            }}
+            onSearch={relookup}
+          />
 
           <div className="space-y-2" role="radiogroup" aria-label="Metadata matches">
             <p className="text-sm font-semibold uppercase tracking-wide text-ink-500 dark:text-ink-400">
@@ -221,7 +206,7 @@ export default function Review() {
               )}
             </div>
           </div>
-          <MetadataForm value={meta} onChange={setMeta} />
+          <MetadataForm value={meta} onChange={setMeta} seriesSuggestions={choices.map((c) => c.series ?? "")} />
           <div className="sticky bottom-20 mt-6 flex flex-col-reverse gap-2 border-t border-ink-100 bg-white pt-4 sm:bottom-0 sm:flex-row sm:justify-end dark:border-ink-800 dark:bg-ink-900">
             <button className="btn-ghost text-red-600 dark:text-red-400" onClick={discard}>
               Discard

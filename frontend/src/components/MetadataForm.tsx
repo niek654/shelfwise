@@ -1,9 +1,12 @@
 import { ReactNode } from "react";
 import { BookMetadata } from "../lib/api";
+import SeriesInput from "./SeriesInput";
 
 interface Props {
   value: BookMetadata;
   onChange: (value: BookMetadata) => void;
+  /** Series names from online matches, offered in the series dropdown. */
+  seriesSuggestions?: string[];
 }
 
 function Field({ label, children, className = "" }: { label: string; children: ReactNode; className?: string }) {
@@ -18,7 +21,7 @@ function Field({ label, children, className = "" }: { label: string; children: R
 const list = (s: string) => s.split(/[;,]/).map((x) => x.trim()).filter(Boolean);
 
 /** Editable metadata form shared by the upload review and the book editor. */
-export default function MetadataForm({ value, onChange }: Props) {
+export default function MetadataForm({ value, onChange, seriesSuggestions }: Props) {
   const set = <K extends keyof BookMetadata>(key: K, v: BookMetadata[K]) => onChange({ ...value, [key]: v });
   const text = (key: keyof BookMetadata) => ({
     value: (value[key] as string | null | undefined) ?? "",
@@ -69,7 +72,14 @@ export default function MetadataForm({ value, onChange }: Props) {
         <input className="input font-mono" {...text("doi")} />
       </Field>
       <Field label="Series" className="sm:col-span-4">
-        <input className="input" {...text("series")} />
+        <SeriesInput
+          value={value.series ?? ""}
+          suggestions={seriesSuggestions}
+          onChange={(series, nextIndex) =>
+            // Picking a known series suggests the next number in it, unless one is already set.
+            onChange({ ...value, series, series_index: value.series_index || nextIndex || null })
+          }
+        />
       </Field>
       <Field label="# in series" className="sm:col-span-2">
         <input className="input" {...text("series_index")} />

@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Download, ImagePlus, Loader2, Pencil, Search, Trash2, X } from "lucide-react";
-import { api, authUrl, Book, BookMetadata, formatBytes, LookupResult, SOURCE_LABELS, year } from "../lib/api";
+import { ArrowLeft, Download, ImagePlus, Loader2, Pencil, Trash2, X } from "lucide-react";
+import { api, authUrl, Book, BookMetadata, formatBytes, LookupResult, ProviderStatus, SOURCE_LABELS, year } from "../lib/api";
 import { useToast } from "../lib/toast";
 import BookCover from "../components/BookCover";
+import LookupPanel from "../components/LookupPanel";
 import MetadataForm from "../components/MetadataForm";
+import ProviderStatusList from "../components/ProviderStatusList";
 
 function Detail({ label, value, mono }: { label: string; value?: string | number | null; mono?: boolean }) {
   if (!value) return null;
@@ -24,8 +26,9 @@ export default function BookDetail() {
   const [book, setBook] = useState<Book | null>(null);
   const [editing, setEditing] = useState<BookMetadata | null>(null);
   const [saving, setSaving] = useState(false);
-  const [lookingUp, setLookingUp] = useState(false);
   const [matches, setMatches] = useState<BookMetadata[]>([]);
+  const [statuses, setStatuses] = useState<ProviderStatus[]>([]);
+  const [picked, setPicked] = useState<number | null>(null);
 
   useEffect(() => {
     api<Book>(`/api/books/${id}`)
@@ -55,6 +58,8 @@ export default function BookDetail() {
       setBook(updated);
       setEditing(null);
       setMatches([]);
+      setStatuses([]);
+      setPicked(null);
       toast("Saved");
     } catch (err) {
       toast((err as Error).message, "error");
@@ -63,23 +68,15 @@ export default function BookDetail() {
     }
   };
 
-  const lookup = async () => {
-    if (!editing) return;
-    setLookingUp(true);
+  const lookup = async (query: { isbn?: string; title?: string; author?: string }) => {
     try {
-      const params = new URLSearchParams();
-      if (editing.isbn13 || editing.isbn10) params.set("isbn", (editing.isbn13 || editing.isbn10)!);
-      else {
-        params.set("title", editing.title);
-        if (editing.authors[0]) params.set("author", editing.authors[0]);
-      }
+      const params = new URLSearchParams(Object.entries(query).filter(([, v]) => v) as [string, string][]);
       const res = await api<LookupResult>(`/api/metadata/lookup?${params}`);
       setMatches(res.candidates);
+      setStatuses(res.providers);
       if (!res.candidates.length) toast("No matches found", "error");
     } catch (err) {
       toast((err as Error).message, "error");
-    } finally {
-      setLookingUp(false);
     }
   };
 
@@ -125,19 +122,27 @@ export default function BookDetail() {
         <div className="min-w-0">
           {editing ? (
             <div className="card p-4 sm:p-6">
-              <div className="mb-4 flex items-center justify-between gap-2">
-                <h2 className="font-serif text-xl font-semibold">Edit metadata</h2>
-                <button className="btn-secondary" onClick={lookup} disabled={lookingUp}>
-                  {lookingUp ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />} Look up online
-                </button>
-              </div>
+              <h2 className="mb-4 font-serif text-xl font-semibold">Edit metadata</h2>
+              <LookupPanel
+                className="mb-4 !shadow-none"
+                initial={{ isbn: book.isbn13 || book.isbn10 || "", title: book.title, author: book.authors[0] ?? "" }}
+                onSearch={lookup}
+              />
+              {statuses.length > 0 && (
+                <div className="mb-4">
+                  <ProviderStatusList providers={statuses} />
+                </div>
+              )}
               {matches.length > 0 && (
                 <div className="mb-6 flex gap-3 overflow-x-auto pb-2">
                   {matches.map((m, i) => (
                     <button
                       key={i}
-                      onClick={() => setEditing({ ...m, cover_url: m.cover_url })}
-                      className="card w-36 shrink-0 p-2 text-left hover:border-brand-400"
+                      onClick={() => {
+                        setEditing({ ...m, cover_url: m.cover_url });
+                        setPicked(i);
+                      }}
+                      className={`card w-36 shrink-0 p-2 text-left hover:border-brand-400 ${picked === i ? "border-brand-500 ring-2 ring-brand-500/30" : ""}`}
                     >
                       <BookCover src={m.cover_url} title={m.title} className="w-full" />
                       <p className="mt-2 line-clamp-2 text-xs font-medium">{m.title}</p>
@@ -146,9 +151,9 @@ export default function BookDetail() {
                   ))}
                 </div>
               )}
-              <MetadataForm value={editing} onChange={setEditing} />
+              <MetadataForm value={editing} onChange={setEditing} seriesSuggestions={matches.map((m) => m.series ?? "")} />
               <div className="mt-6 flex justify-end gap-2">
-                <button className="btn-ghost" onClick={() => (setEditing(null), setMatches([]))}>
+                <button className="btn-ghost" onClick={() => (setEditing(null), setMatches([]), setStatuses([]), setPicked(null))}>
                   <X className="h-4 w-4" /> Cancel
                 </button>
                 <button className="btn-primary" onClick={save} disabled={saving}>
@@ -165,10 +170,13 @@ export default function BookDetail() {
                 {year(book.published_date) && <span className="text-ink-400"> · {year(book.published_date)}</span>}
               </p>
               {book.series && (
-                <p className="mt-1 text-sm text-ink-500">
+                <Link
+                  to={`/series/${encodeURIComponent(book.series)}`}
+                  className="mt-1 inline-block text-sm text-brand-600 hover:underline dark:text-brand-400"
+                >
                   {book.series}
                   {book.series_index && ` #${book.series_index}`}
-                </p>
+                </Link>
               )}
               {book.categories.length > 0 && (
                 <div className="mt-4 flex flex-wrap gap-1.5">

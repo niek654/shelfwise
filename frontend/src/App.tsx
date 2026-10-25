@@ -9,6 +9,8 @@ import BookDetail from "./pages/BookDetail";
 import Library from "./pages/Library";
 import Login from "./pages/Login";
 import Review from "./pages/Review";
+import Series from "./pages/Series";
+import SeriesDetail from "./pages/SeriesDetail";
 import Settings from "./pages/Settings";
 import UploadPage from "./pages/UploadPage";
 
@@ -27,6 +29,8 @@ function AppRoutes() {
       <Route element={user ? <Layout /> : <Navigate to="/login" replace />}>
         <Route index element={<Library />} />
         <Route path="books/:id" element={<BookDetail />} />
+        <Route path="series" element={<Series />} />
+        <Route path="series/:name" element={<SeriesDetail />} />
         <Route path="upload" element={<UploadPage />} />
         <Route path="upload/:id" element={<Review />} />
         <Route path="admin" element={<Admin />} />

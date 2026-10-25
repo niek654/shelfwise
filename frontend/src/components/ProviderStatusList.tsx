@@ -15,11 +15,12 @@ export default function ProviderStatusList({ providers }: { providers?: Provider
       {providers.map((p) => (
         <li key={p.name} className="flex items-start gap-2">
           <span className={`mt-1 h-2 w-2 shrink-0 rounded-full ${STYLES[p.status]}`} aria-hidden />
-          <span className="shrink-0 font-medium">{p.label}</span>
-          <span
-            className={`min-w-0 [overflow-wrap:anywhere] ${p.status === "error" ? "text-red-600 dark:text-red-400" : "text-ink-500 dark:text-ink-400"}`}
-          >
-            {p.status === "disabled" ? `Off${p.message ? ` · ${p.message}` : ""}` : p.message}
+          {/* Inline text so the message wraps under the label on narrow screens. */}
+          <span className="min-w-0 [overflow-wrap:anywhere]">
+            <span className="font-medium">{p.label}</span>{" "}
+            <span className={p.status === "error" ? "text-red-600 dark:text-red-400" : "text-ink-500 dark:text-ink-400"}>
+              {p.status === "disabled" ? `Off${p.message ? ` · ${p.message}` : ""}` : p.message}
+            </span>
           </span>
         </li>
       ))}

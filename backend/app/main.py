@@ -11,7 +11,7 @@ from .auth import hash_password
 from .config import get_settings
 from .db import Base, SessionLocal, engine
 from .models import Upload, UploadStatus, User
-from .routers import auth, books, metadata, uploads, users
+from .routers import auth, books, metadata, series, uploads, users
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("shelfwise")
@@ -54,7 +54,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Shelfwise", version=__version__, lifespan=lifespan, docs_url="/api/docs", openapi_url="/api/openapi.json")
-for r in (auth.router, users.router, books.router, uploads.router, metadata.router):
+for r in (auth.router, users.router, books.router, series.router, uploads.router, metadata.router):
     app.include_router(r)
 
 

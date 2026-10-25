@@ -82,6 +82,14 @@ export interface Upload {
   created_at: string;
 }
 
+export interface SeriesSummary {
+  name: string;
+  count: number;
+  authors: string[];
+  cover_book_ids: number[];
+  next_index: string | null;
+}
+
 export interface ProviderStatus {
   name: string;
   label: string;

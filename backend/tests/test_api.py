@@ -138,3 +138,29 @@ def test_filename_template():
 
     meta = BookMetadata(title='What/If? "Serious"', authors=["Randall Munroe"])
     assert str(render_name(meta, "pdf")) == "Randall Munroe/Randall Munroe - What-If Serious.pdf"
+
+
+def test_series(client):
+    from app.db import SessionLocal
+    from app.models import Book, User
+
+    token = client.post("/api/auth/login", json={"username": "bob", "password": "password123"}).json()["access_token"]
+    with SessionLocal() as db:
+        bob = db.query(User).filter_by(username="bob").one()
+        for title, idx in [("Words of Radiance", "2"), ("Oathbringer", "3"), ("The Way of Kings", "1"),
+                           ("Edgedancer", "2.5"), ("Rhythm of War", "10"), ("Art book", None)]:
+            db.add(Book(owner_id=bob.id, title=title, authors=["Brandon Sanderson"], series="Stormlight Archive",
+                        series_index=idx, file_path=f"x/{title}.epub", original_filename="x.epub",
+                        file_format="epub", file_size=1, file_hash=title))
+        db.commit()
+
+    series = client.get("/api/series", headers=auth(token)).json()
+    assert series == [{
+        "name": "Stormlight Archive", "count": 6, "authors": ["Brandon Sanderson"],
+        "cover_book_ids": [], "next_index": "11",
+    }]
+    books = client.get("/api/series/books", params={"name": "Stormlight Archive"}, headers=auth(token)).json()
+    assert [b["title"] for b in books] == [
+        "The Way of Kings", "Words of Radiance", "Edgedancer", "Oathbringer", "Rhythm of War", "Art book",
+    ]
+    assert client.get("/api/series/books", params={"name": "Nope"}, headers=auth(token)).status_code == 404
