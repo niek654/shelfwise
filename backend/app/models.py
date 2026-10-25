@@ -37,6 +37,8 @@ class Book(Base):
     authors: Mapped[list] = mapped_column(JSON, default=list)
     publisher: Mapped[Optional[str]] = mapped_column(String(255))
     published_date: Mapped[Optional[str]] = mapped_column(String(32))
+    # Derived from published_date (free-form across sources) for filtering and sorting.
+    published_year: Mapped[Optional[int]] = mapped_column(Integer, index=True)
     isbn10: Mapped[Optional[str]] = mapped_column(String(10), index=True)
     isbn13: Mapped[Optional[str]] = mapped_column(String(13), index=True)
     doi: Mapped[Optional[str]] = mapped_column(String(255))

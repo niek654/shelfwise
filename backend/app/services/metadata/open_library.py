@@ -3,6 +3,7 @@ from typing import List, Optional
 import httpx
 
 from ...schemas import BookMetadata
+from ..languages import normalize_language
 from .base import Provider, fill_isbns
 
 BASE = "https://openlibrary.org"
@@ -52,6 +53,7 @@ class OpenLibrary(Provider):
         resp.raise_for_status()
         results = []
         for doc in resp.json().get("docs", []):
+            languages = doc.get("language") or []
             year = doc.get("first_publish_year")
             meta = BookMetadata(
                 title=doc.get("title", ""),
@@ -59,7 +61,8 @@ class OpenLibrary(Provider):
                 authors=doc.get("author_name", []),
                 publisher=(doc.get("publisher") or [None])[0],
                 published_date=str(year) if year else None,
-                language=(doc.get("language") or [None])[0],
+                # Search docs list the languages of *all* editions of the work; only trust a single one.
+                language=normalize_language(languages[0]) if len(languages) == 1 else None,
                 page_count=doc.get("number_of_pages_median"),
                 categories=(doc.get("subject") or [])[:8],
                 cover_url=f"{COVERS}/id/{doc['cover_i']}-L.jpg" if doc.get("cover_i") else None,

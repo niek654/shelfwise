@@ -82,6 +82,22 @@ export interface Upload {
   created_at: string;
 }
 
+export interface FacetValue {
+  value: string;
+  count: number;
+}
+
+export interface Facets {
+  languages: FacetValue[];
+  formats: FacetValue[];
+  authors: FacetValue[];
+  series: FacetValue[];
+  categories: FacetValue[];
+  publishers: FacetValue[];
+  years: { min: number; max: number } | null;
+  missing: Record<string, number>;
+}
+
 export interface SeriesSummary {
   name: string;
   count: number;

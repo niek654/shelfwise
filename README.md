@@ -12,7 +12,8 @@ Shelfwise is a self-hosted book manager. You upload e-book files, it finds their
   - Flags files that are already in your library
 - **Metadata sources**: Google Books, Hardcover, Open Library, Apple Books, KB (Dutch national library), DNB (German national library), WorldCat (OCLC), Crossref and OpenAlex. Records for the same book are merged into one "Combined" result. The review screen shows what each source returned, or why it failed
 - **ISBN tools**: checksum validation, conversion between ISBN-10 and ISBN-13, ISBN search
-- **Library**: search by title, author, ISBN, series or publisher; sort and filter by format; grid or list view; edit metadata, replace covers, download
+- **Library**: search by title, author, ISBN, series or publisher; filter by language, author, series, category, publisher, format, publication year or missing metadata; grid or list view; select and delete several books at once; edit metadata, replace covers, download
+- **Series**: browse series in reading order; rename or merge a series across all its books
 - **Multiple users**: each user has their own library. The first account becomes the administrator, and admins can manage users. Registration can be turned off
 - **Modern UI**: built with React and Tailwind. Responsive with mobile bottom navigation, and a light/dark/system theme
 - **Formats**: EPUB, PDF, MOBI, AZW/AZW3, FB2, DJVU, CBZ/CBR, TXT, RTF, DOCX

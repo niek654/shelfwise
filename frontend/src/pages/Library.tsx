@@ -1,7 +1,10 @@
 import { ReactNode, useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { BookOpen, CheckCircle2, Circle, LayoutGrid, List, ListChecks, Loader2, Search, Trash2, Upload, X } from "lucide-react";
-import { api, authUrl, Book, BookPage, formatBytes, year } from "../lib/api";
+import {
+  BookOpen, CheckCircle2, Circle, LayoutGrid, List, ListChecks, Loader2, Search, SlidersHorizontal, Trash2, Upload, X,
+} from "lucide-react";
+import { api, authUrl, Book, BookPage, Facets, formatBytes, year } from "../lib/api";
+import { activeFilters, FILTER_KEYS, FilterChips, FilterPanel, Filters } from "../components/LibraryFilters";
 import { useToast } from "../lib/toast";
 import BookCover from "../components/BookCover";
 
@@ -57,7 +60,11 @@ export default function Library() {
   const [params, setParams] = useSearchParams();
   const q = params.get("q") ?? "";
   const sort = params.get("sort") ?? "added";
-  const format = params.get("format") ?? "";
+  const filters = Object.fromEntries(FILTER_KEYS.map((k) => [k, params.get(k) ?? ""])) as Filters;
+  // Stable dependency for effects: changes whenever any filter changes.
+  const filterKey = FILTER_KEYS.map((k) => filters[k]).join("\u0000");
+  const activeCount = activeFilters(filters).length;
+  const [showFilters, setShowFilters] = useState(activeCount > 0);
   const [query, setQuery] = useState(q);
   const toast = useToast();
   const [books, setBooks] = useState<Book[]>([]);
@@ -67,7 +74,7 @@ export default function Library() {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
-  const [formats, setFormats] = useState<string[]>([]);
+  const [facets, setFacets] = useState<Facets | null>(null);
   const [view, setView] = useState<"grid" | "list">(() => {
     try {
       return localStorage.getItem(VIEW_KEY) === "list" ? "list" : "grid";
@@ -90,20 +97,31 @@ export default function Library() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query]);
 
+  const loadFacets = () => api<Facets>("/api/books/facets").then(setFacets).catch(() => undefined);
   useEffect(() => {
-    api<{ formats: Record<string, number> }>("/api/books/stats").then((s) => setFormats(Object.keys(s.formats).sort()));
+    loadFacets();
   }, []);
+
+  const clearFilters = () => {
+    const next = new URLSearchParams(params);
+    FILTER_KEYS.forEach((k) => next.delete(k));
+    setParams(next, { replace: true });
+  };
 
   useEffect(() => {
     setPage(1);
-  }, [q, sort, format]);
+  }, [q, sort, filterKey]);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     const search = new URLSearchParams({ sort, page: String(page), page_size: String(PAGE_SIZE) });
     if (q) search.set("q", q);
-    if (format) search.set("format", format);
+    for (const k of FILTER_KEYS) {
+      const v = filters[k];
+      // Only apply a year once all four digits are typed.
+      if (v && (!k.startsWith("year_") || /^\d{4}$/.test(v))) search.set(k, v);
+    }
     api<BookPage>(`/api/books?${search}`)
       .then((res) => {
         if (cancelled) return;
@@ -114,7 +132,8 @@ export default function Library() {
     return () => {
       cancelled = true;
     };
-  }, [q, sort, format, page]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q, sort, filterKey, page]);
 
   const setViewMode = (v: "grid" | "list") => {
     setView(v);
@@ -149,6 +168,7 @@ export default function Library() {
       setBooks((prev) => prev.filter((b) => !selected.has(b.id)));
       setTotal((t) => t - res.deleted);
       toast(`Deleted ${res.deleted} ${res.deleted === 1 ? "book" : "books"}`);
+      loadFacets();
       stopSelecting();
     } catch (err) {
       toast((err as Error).message, "error");
@@ -165,6 +185,7 @@ export default function Library() {
           <p className="mt-1 text-sm text-ink-500 dark:text-ink-400">
             {total} {total === 1 ? "book" : "books"}
             {q && ` matching “${q}”`}
+            {activeCount > 0 && ` · ${activeCount} ${activeCount === 1 ? "filter" : "filters"}`}
           </p>
         </div>
         <div className="flex gap-2">
@@ -197,16 +218,14 @@ export default function Library() {
           <option value="author">Author</option>
           <option value="published">Publication date</option>
         </select>
-        {formats.length > 1 && (
-          <select className="input w-auto flex-1 sm:flex-none" value={format} onChange={(e) => update("format", e.target.value)} aria-label="Format">
-            <option value="">All formats</option>
-            {formats.map((f) => (
-              <option key={f} value={f}>
-                {f.toUpperCase()}
-              </option>
-            ))}
-          </select>
-        )}
+        <button
+          className={`btn-secondary flex-1 sm:flex-none ${showFilters ? "!border-brand-500 !text-brand-700 dark:!text-brand-300" : ""}`}
+          onClick={() => setShowFilters(!showFilters)}
+          aria-expanded={showFilters}
+        >
+          <SlidersHorizontal className="h-4 w-4" /> Filters
+          {activeCount > 0 && <span className="badge bg-brand-600 px-1.5 text-white">{activeCount}</span>}
+        </button>
         <div className="flex rounded-lg border border-ink-200 p-0.5 dark:border-ink-700">
           {(["grid", "list"] as const).map((v) => {
             const Icon = v === "grid" ? LayoutGrid : List;
@@ -224,14 +243,17 @@ export default function Library() {
         </div>
       </div>
 
+      {showFilters && <FilterPanel facets={facets} filters={filters} onChange={update} onClear={clearFilters} />}
+      <FilterChips filters={filters} onRemove={(k) => update(k, "")} />
+
       {!loading && books.length === 0 ? (
         <div className="card flex flex-col items-center px-6 py-16 text-center">
           <BookOpen className="h-10 w-10 text-ink-300 dark:text-ink-600" />
-          <h2 className="mt-4 font-medium">{q || format ? "No books match your filters" : "Your shelf is empty"}</h2>
+          <h2 className="mt-4 font-medium">{q || activeCount ? "No books match your filters" : "Your shelf is empty"}</h2>
           <p className="mt-1 max-w-sm text-sm text-ink-500 dark:text-ink-400">
-            {q || format ? "Try a different search." : "Upload EPUB, PDF, MOBI and other e-book files to get started."}
+            {q || activeCount ? "Try a different search or remove a filter." : "Upload EPUB, PDF, MOBI and other e-book files to get started."}
           </p>
-          {!q && !format && (
+          {!q && !activeCount && (
             <Link to="/upload" className="btn-primary mt-6">
               <Upload className="h-4 w-4" /> Upload books
             </Link>

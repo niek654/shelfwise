@@ -6,7 +6,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import or_, select
 
-from . import __version__
+from . import __version__, migrations
 from .auth import hash_password
 from .config import get_settings
 from .db import Base, SessionLocal, engine
@@ -23,6 +23,7 @@ def bootstrap() -> None:
         d.mkdir(parents=True, exist_ok=True)
     Base.metadata.create_all(engine)
     with SessionLocal() as db:
+        migrations.run(engine, db)
         if settings.admin_username and settings.admin_password:
             exists = db.scalar(
                 select(User).where(

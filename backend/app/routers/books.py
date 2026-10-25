@@ -1,3 +1,5 @@
+import json
+from collections import Counter
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
@@ -21,8 +23,14 @@ SORTS = {
     "added": Book.created_at.desc(),
     "title": func.lower(Book.title).asc(),
     "author": cast(Book.authors, String).asc(),
-    "published": Book.published_date.desc(),
+    "published": Book.published_year.desc().nulls_last(),
 }
+
+
+def _json_contains(column, value: str):
+    """Match a JSON string array containing `value`. JSON is stored ASCII-escaped
+    ("J\\u00f6rn"), so compare against the same encoding."""
+    return cast(column, String).ilike(f"%{json.dumps(value)}%")
 
 
 def get_book(book_id: int, user: User, db: Session) -> Book:
@@ -36,6 +44,14 @@ def get_book(book_id: int, user: User, db: Session) -> Book:
 def list_books(
     q: Optional[str] = None,
     format: Optional[str] = None,
+    language: Optional[str] = None,
+    author: Optional[str] = None,
+    series: Optional[str] = None,
+    category: Optional[str] = None,
+    publisher: Optional[str] = None,
+    year_from: Optional[int] = None,
+    year_to: Optional[int] = None,
+    missing: Optional[str] = Query(None, pattern="^(cover|isbn|description|series|language)$"),
     sort: str = Query("added", pattern="^(added|title|author|published)$"),
     page: int = Query(1, ge=1),
     page_size: int = Query(48, ge=1, le=200),
@@ -53,6 +69,8 @@ def list_books(
             Book.title.ilike(like),
             Book.subtitle.ilike(like),
             cast(Book.authors, String).ilike(like),
+            # Authors are stored ASCII-escaped, so also match "Jörn" as "J\\u00f6rn".
+            cast(Book.authors, String).ilike(f"%{json.dumps(q.strip())[1:-1]}%"),
             Book.publisher.ilike(like),
             Book.series.ilike(like),
         ]
@@ -61,6 +79,27 @@ def list_books(
         stmt = stmt.where(or_(*conditions))
     if format:
         stmt = stmt.where(Book.file_format == format.lower())
+    if language:
+        stmt = stmt.where(Book.language == language)
+    if author:
+        stmt = stmt.where(_json_contains(Book.authors, author))
+    if series:
+        stmt = stmt.where(Book.series == series)
+    if category:
+        stmt = stmt.where(_json_contains(Book.categories, category))
+    if publisher:
+        stmt = stmt.where(Book.publisher == publisher)
+    if year_from is not None:
+        stmt = stmt.where(Book.published_year >= year_from)
+    if year_to is not None:
+        stmt = stmt.where(Book.published_year <= year_to)
+    if missing == "cover":
+        stmt = stmt.where(Book.cover_path.is_(None))
+    elif missing == "isbn":
+        stmt = stmt.where(Book.isbn13.is_(None), Book.isbn10.is_(None))
+    elif missing in ("description", "series", "language"):
+        column = getattr(Book, missing)
+        stmt = stmt.where(or_(column.is_(None), column == ""))
     total = db.scalar(select(func.count()).select_from(stmt.subquery()))
     rows = db.scalars(stmt.order_by(SORTS[sort], Book.id.desc()).offset((page - 1) * page_size).limit(page_size))
     return BookPage(items=[library.to_out(b) for b in rows], total=total or 0, page=page, page_size=page_size)
@@ -77,6 +116,51 @@ def stats(user: User = Depends(get_current_user), db: Session = Depends(get_db))
         "total": sum(r[1] for r in rows),
         "size": sum(int(r[2]) for r in rows),
         "formats": {r[0]: r[1] for r in rows},
+    }
+
+
+def _counted(counter: Counter) -> List[dict]:
+    return [{"value": v, "count": n} for v, n in sorted(counter.items(), key=lambda kv: (-kv[1], kv[0].lower()))]
+
+
+@router.get("/facets")
+def facets(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Values present in the user's library, with counts, to build the filter menus."""
+    rows = db.execute(
+        select(
+            Book.language, Book.file_format, Book.authors, Book.series, Book.categories, Book.publisher,
+            Book.published_year, Book.cover_path, Book.isbn13, Book.isbn10, Book.description,
+        ).where(Book.owner_id == user.id)
+    ).all()
+    languages, formats, authors, series, categories, publishers = (Counter() for _ in range(6))
+    years = []
+    missing = Counter()
+    for lang, fmt, auths, ser, cats, pub, year, cover, i13, i10, desc in rows:
+        languages[lang] += bool(lang)
+        formats[fmt] += 1
+        for a in auths or []:
+            authors[a] += 1
+        series[ser] += bool(ser)
+        for c in cats or []:
+            categories[c] += 1
+        publishers[pub] += bool(pub)
+        if year:
+            years.append(year)
+        missing["cover"] += not cover
+        missing["isbn"] += not (i13 or i10)
+        missing["description"] += not desc
+        missing["series"] += not ser
+        missing["language"] += not lang
+    drop_empty = lambda c: Counter({k: v for k, v in c.items() if k and v})  # noqa: E731
+    return {
+        "languages": _counted(drop_empty(languages)),
+        "formats": _counted(drop_empty(formats)),
+        "authors": _counted(drop_empty(authors)),
+        "series": _counted(drop_empty(series)),
+        "categories": _counted(drop_empty(categories)),
+        "publishers": _counted(drop_empty(publishers)),
+        "years": {"min": min(years), "max": max(years)} if years else None,
+        "missing": dict(missing),
     }
 
 

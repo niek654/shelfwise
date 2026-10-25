@@ -7,6 +7,7 @@ from ..config import get_settings
 from ..models import Book, utcnow
 from ..schemas import BookMetadata, BookOut
 from . import isbn as isbn_utils
+from .languages import normalize_language, parse_year
 from . import storage
 
 BOOK_FIELDS = [
@@ -30,6 +31,8 @@ def normalize_metadata(meta: BookMetadata) -> BookMetadata:
         meta.authors = [a.strip() for a in meta.authors if a and a.strip()]
     if meta.categories is not None:
         meta.categories = [c.strip() for c in meta.categories if c and c.strip()]
+    if meta.language:
+        meta.language = normalize_language(meta.language)
     if meta.isbn13:
         meta.isbn13 = isbn_utils.to_isbn13(meta.isbn13) or isbn_utils.clean(meta.isbn13)[:13] or None
     if meta.isbn10:
@@ -52,6 +55,7 @@ def apply_metadata(book: Book, meta: BookMetadata, only_set: bool = False) -> No
                 continue
             value = [] if field in ("authors", "categories") else None
         setattr(book, field, value)
+    book.published_year = parse_year(book.published_date)
     if meta.source:
         book.metadata_source = meta.source
 
