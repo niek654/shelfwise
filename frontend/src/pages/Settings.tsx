@@ -69,8 +69,11 @@ export default function Settings() {
         <h2 className="font-medium">Metadata sources</h2>
         <ul className="mt-3 space-y-2">
           {config?.providers.map((p) => (
-            <li key={p.name} className="flex items-center justify-between text-sm">
-              {p.label}
+            <li key={p.name} className="flex items-center justify-between gap-3 text-sm">
+              <span className="min-w-0">
+                {p.label}
+                {p.enabled && p.note && <span className="block text-xs text-amber-600 dark:text-amber-400">{p.note}</span>}
+              </span>
               {p.enabled ? (
                 <span className="badge gap-1 bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400">
                   <Check className="h-3 w-3" /> Enabled

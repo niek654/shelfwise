@@ -9,7 +9,7 @@ from ..config import get_settings
 from ..db import get_db
 from ..models import User
 from ..schemas import LoginIn, PasswordChange, RegisterIn, Token, UserOut
-from ..services.metadata import PROVIDERS
+from ..services.metadata import PROVIDERS, provider_note
 
 router = APIRouter(prefix="/api", tags=["auth"])
 
@@ -22,7 +22,9 @@ def public_config(db: Session = Depends(get_db)):
         "version": __version__,
         "allow_registration": settings.allow_registration or not has_users,
         "needs_setup": not has_users,
-        "providers": [{"name": p.name, "label": p.label, "enabled": p.enabled()} for p in PROVIDERS],
+        "providers": [
+            {"name": p.name, "label": p.label, "enabled": p.enabled(), "note": provider_note(p)} for p in PROVIDERS
+        ],
         "filename_template": settings.filename_template,
     }
 

@@ -147,4 +147,4 @@ class UploadConfirm(BookMetadata):
 
 class LookupResult(BaseModel):
     candidates: List[BookMetadata]
-    providers: List[str]
+    providers: List[dict]

@@ -5,6 +5,7 @@ import zipfile
 import pytest
 
 from app.schemas import BookMetadata
+from app.services.metadata import LookupOutcome
 
 OPF = """<?xml version="1.0"?>
 <package xmlns="http://www.idpf.org/2007/opf" version="3.0">
@@ -39,12 +40,12 @@ def fake_lookup(monkeypatch):
 
     async def lookup(isbn=None, doi=None, title=None, author=None, limit=5):
         calls.append(isbn or title)
-        return [
+        return LookupOutcome(candidates=[
             BookMetadata(
                 title="Dune", authors=["Frank Herbert"], published_date="1965-08-01",
                 isbn13="9780441013593", publisher="Ace", source="google_books",
             )
-        ]
+        ], providers=[{"name": "google_books", "label": "Google Books", "status": "ok", "message": "1 result"}])
 
     monkeypatch.setattr("app.services.metadata.lookup", lookup)
     return calls
@@ -81,6 +82,7 @@ def test_full_flow(client, data_dir, fake_lookup):
     assert up["extracted"]["isbns"] == ["9780441013593"]
     assert fake_lookup == ["9780441013593"]
     assert up["candidates"][0]["publisher"] == "Ace"
+    assert up["extracted"]["lookup"][0]["status"] == "ok"
     assert client.get(f"/api/uploads/{upload_id}/cover", headers=auth(alice)).status_code == 200
 
     # Other users cannot see it

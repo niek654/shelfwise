@@ -58,19 +58,17 @@ async def process_upload(upload_id: int) -> None:
             )
             upload.duplicate_of = dup
 
-            candidates = []
-            for isbn in hints["isbns"][:2]:
-                candidates = await metadata.lookup(isbn=isbn)
-                if candidates:
+            author = (hints.get("authors") or [None])[0]
+            outcome = None
+            # Files often list several ISBNs (print, e-book); try the first two.
+            for isbn in hints["isbns"][:2] or [None]:
+                outcome = await metadata.lookup(isbn=isbn, doi=hints.get("doi"), title=hints.get("title"), author=author)
+                if outcome.candidates:
                     break
-            if not candidates and hints.get("doi"):
-                candidates = await metadata.lookup(doi=hints["doi"])
-            if not candidates and hints.get("title"):
-                author = (hints.get("authors") or [None])[0]
-                candidates = await metadata.lookup(title=hints["title"], author=author)
 
-            upload.extracted = hints
-            upload.candidates = [c.model_dump() for c in candidates]
+            # Provider statuses live in `extracted` so no schema migration is needed.
+            upload.extracted = {**hints, "lookup": outcome.providers}
+            upload.candidates = [c.model_dump() for c in outcome.candidates]
             upload.status = UploadStatus.review
         except Exception as exc:  # keep the upload reviewable even if processing breaks
             log.exception("Processing upload %s failed", upload_id)
@@ -160,8 +158,9 @@ async def relookup(
     upload = _get_upload(upload_id, user, db)
     if not any([body.isbn, body.title, body.doi]):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Provide an ISBN, DOI or title")
-    candidates = await metadata.lookup(isbn=body.isbn, doi=body.doi, title=body.title, author=body.author)
-    upload.candidates = [c.model_dump() for c in candidates]
+    outcome = await metadata.lookup(isbn=body.isbn, doi=body.doi, title=body.title, author=body.author)
+    upload.candidates = [c.model_dump() for c in outcome.candidates]
+    upload.extracted = {**upload.extracted, "lookup": outcome.providers}
     db.commit()
     return upload
 

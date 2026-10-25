@@ -65,6 +65,7 @@ export interface Extracted {
   series?: string | null;
   series_index?: string | null;
   embedded_cover?: string;
+  lookup?: ProviderStatus[];
 }
 
 export interface Upload {
@@ -81,15 +82,23 @@ export interface Upload {
   created_at: string;
 }
 
+export interface ProviderStatus {
+  name: string;
+  label: string;
+  status: "ok" | "no_results" | "error" | "disabled";
+  message: string | null;
+}
+
 export interface LookupResult {
   candidates: BookMetadata[];
-  providers: string[];
+  providers: ProviderStatus[];
 }
 
 export interface Provider {
   name: string;
   label: string;
   enabled: boolean;
+  note: string | null;
 }
 
 export interface AppConfig {

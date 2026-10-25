@@ -6,6 +6,7 @@ import { useAuth } from "../lib/auth";
 import { useToast } from "../lib/toast";
 import BookCover from "../components/BookCover";
 import MetadataForm, { previewFilename } from "../components/MetadataForm";
+import ProviderStatusList from "../components/ProviderStatusList";
 import { Steps } from "./UploadPage";
 
 function fromFile(u: Upload): BookMetadata {
@@ -156,7 +157,7 @@ export default function Review() {
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
         {/* Candidates */}
-        <div className="space-y-4">
+        <div className="min-w-0 space-y-4">
           <form onSubmit={relookup} className="card space-y-3 p-4">
             <p className="text-sm font-medium">Search again</p>
             <input className="input font-mono" placeholder="ISBN" value={search.isbn} onChange={(e) => setSearch({ ...search, isbn: e.target.value })} />
@@ -176,6 +177,9 @@ export default function Review() {
             <p className="text-sm font-semibold uppercase tracking-wide text-ink-500 dark:text-ink-400">
               {upload.candidates.length ? `${upload.candidates.length} matches` : "No online matches"}
             </p>
+            <div className="pb-2">
+              <ProviderStatusList providers={upload.extracted.lookup} />
+            </div>
             {choices.map((c, i) => (
               <button
                 key={i}

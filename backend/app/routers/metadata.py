@@ -18,5 +18,5 @@ async def lookup(
 ):
     if not any([isbn, doi, title]):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Provide an ISBN, DOI or title")
-    candidates = await metadata.lookup(isbn=isbn, doi=doi, title=title, author=author)
-    return LookupResult(candidates=candidates, providers=[p.name for p in metadata.active_providers()])
+    outcome = await metadata.lookup(isbn=isbn, doi=doi, title=title, author=author)
+    return LookupResult(candidates=outcome.candidates, providers=outcome.providers)
