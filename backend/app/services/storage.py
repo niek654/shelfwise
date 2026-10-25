@@ -86,7 +86,8 @@ def store_file(src: Path, rel: Path) -> Path:
 def relocate(current_rel: str, new_rel: Path) -> str:
     library = get_settings().library_dir
     current = library / current_rel
-    if (library / new_rel) == current:
+    # A file that went missing on disk shouldn't block a metadata update.
+    if (library / new_rel) == current or not current.exists():
         return current_rel
     dest = unique_path(library / new_rel)
     dest.parent.mkdir(parents=True, exist_ok=True)

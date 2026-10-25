@@ -181,3 +181,25 @@ def test_series(client):
         "The Way of Kings", "Words of Radiance", "Edgedancer", "Oathbringer", "Rhythm of War", "Art book",
     ]
     assert client.get("/api/series/books", params={"name": "Nope"}, headers=auth(token)).status_code == 404
+
+
+def test_series_rename_and_bulk_delete(client):
+    token = client.post("/api/auth/login", json={"username": "bob", "password": "password123"}).json()["access_token"]
+    alice = client.post("/api/auth/login", json={"username": "alice", "password": "password123"}).json()["access_token"]
+
+    r = client.patch("/api/series", headers=auth(token), json={"name": "Stormlight Archive", "new_name": " The Stormlight Archive "})
+    assert r.status_code == 200 and r.json() == {"name": "The Stormlight Archive", "updated": 6, "merged": False}
+    names = [s["name"] for s in client.get("/api/series", headers=auth(token)).json()]
+    assert names == ["The Stormlight Archive"]
+    assert client.patch("/api/series", headers=auth(token), json={"name": "Nope", "new_name": "X"}).status_code == 404
+
+    books = client.get("/api/series/books", params={"name": "The Stormlight Archive"}, headers=auth(token)).json()
+    ids = [b["id"] for b in books[:2]]
+    # Another (non-admin) user's request for these ids deletes nothing... alice is admin, so use a fresh user.
+    client.post("/api/auth/register", json={"username": "carol", "email": "carol@example.com", "password": "password123"})
+    carol = client.post("/api/auth/login", json={"username": "carol", "password": "password123"}).json()["access_token"]
+    assert client.post("/api/books/bulk-delete", headers=auth(carol), json={"ids": ids}).json() == {"deleted": 0}
+    assert client.post("/api/books/bulk-delete", headers=auth(token), json={"ids": ids + [999999]}).json() == {"deleted": 2}
+    assert client.get("/api/books", headers=auth(token)).json()["total"] == 4
+    assert client.post("/api/books/bulk-delete", headers=auth(token), json={"ids": []}).status_code == 422
+    assert alice  # admin login still works

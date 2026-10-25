@@ -1,7 +1,8 @@
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse, Response
+from pydantic import BaseModel, Field
 from sqlalchemy import String, cast, func, or_, select
 from sqlalchemy.orm import Session
 
@@ -139,6 +140,22 @@ def file_cover(book_id: int, user: User = Depends(get_current_user), db: Session
     if not cover:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "The file has no embedded cover")
     return Response(content=cover[0], media_type=cover[1])
+
+
+class BulkDelete(BaseModel):
+    ids: List[int] = Field(min_length=1, max_length=1000)
+
+
+@router.post("/bulk-delete")
+def bulk_delete(body: BulkDelete, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Delete several books (and their files) at once. Books the user may not access are skipped."""
+    books = db.scalars(select(Book).where(Book.id.in_(set(body.ids)))).all()
+    allowed = [b for b in books if b.owner_id == user.id or user.is_admin]
+    for book in allowed:
+        library.delete_book_files(book)
+        db.delete(book)
+    db.commit()
+    return {"deleted": len(allowed)}
 
 
 @router.delete("/{book_id}", status_code=204)

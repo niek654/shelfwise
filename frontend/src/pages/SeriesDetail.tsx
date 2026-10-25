@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Loader2 } from "lucide-react";
-import { api, authUrl, Book, year } from "../lib/api";
+import { ArrowLeft, Check, Loader2, Pencil, X } from "lucide-react";
+import { api, authUrl, Book, SeriesSummary, year } from "../lib/api";
 import { useToast } from "../lib/toast";
 import BookCover from "../components/BookCover";
 
@@ -10,6 +10,39 @@ export default function SeriesDetail() {
   const navigate = useNavigate();
   const toast = useToast();
   const [books, setBooks] = useState<Book[] | null>(null);
+  const [newName, setNewName] = useState<string | null>(null);
+  const [others, setOthers] = useState<string[]>([]);
+  const [saving, setSaving] = useState(false);
+
+  const startRename = () => {
+    setNewName(name);
+    // Other series names, to warn when a rename would merge two series.
+    api<SeriesSummary[]>("/api/series").then((all) => setOthers(all.map((x) => x.name).filter((n) => n !== name)));
+  };
+
+  const trimmed = newName?.trim() ?? "";
+  const mergeTarget = others.find((o) => o.toLowerCase() === trimmed.toLowerCase());
+
+  const rename = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!trimmed || trimmed === name) return setNewName(null);
+    // Use the existing spelling when merging, so the two series become one.
+    const target = mergeTarget ?? trimmed;
+    setSaving(true);
+    try {
+      const res = await api<{ name: string; updated: number; merged: boolean }>("/api/series", {
+        method: "PATCH",
+        json: { name, new_name: target },
+      });
+      toast(res.merged ? `Merged ${res.updated} books into “${res.name}”` : `Renamed series on ${res.updated} books`);
+      setNewName(null);
+      navigate(`/series/${encodeURIComponent(res.name)}`, { replace: true });
+    } catch (err) {
+      toast((err as Error).message, "error");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   useEffect(() => {
     setBooks(null);
@@ -38,7 +71,38 @@ export default function SeriesDetail() {
       <Link to="/series" className="btn-ghost -ml-3 mb-2">
         <ArrowLeft className="h-4 w-4" /> Series
       </Link>
-      <h1 className="font-serif text-3xl font-semibold leading-tight sm:text-4xl">{name}</h1>
+      {newName === null ? (
+        <div className="flex items-start gap-2">
+          <h1 className="min-w-0 font-serif text-3xl font-semibold leading-tight sm:text-4xl">{name}</h1>
+          <button className="btn-ghost mt-1 h-9 w-9 shrink-0 p-0" onClick={startRename} aria-label="Rename series" title="Rename series">
+            <Pencil className="h-4 w-4" />
+          </button>
+        </div>
+      ) : (
+        <form onSubmit={rename} className="space-y-2">
+          <div className="flex items-center gap-2">
+            <input
+              className="input font-serif text-xl font-semibold sm:text-2xl"
+              autoFocus
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              onKeyDown={(e) => e.key === "Escape" && setNewName(null)}
+              aria-label="Series name"
+            />
+            <button className="btn-primary h-10 w-10 shrink-0 p-0" disabled={saving || !trimmed} aria-label="Save series name">
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+            </button>
+            <button type="button" className="btn-ghost h-10 w-10 shrink-0 p-0" onClick={() => setNewName(null)} aria-label="Cancel">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <p className={`text-xs ${mergeTarget ? "text-amber-600 dark:text-amber-400" : "text-ink-500 dark:text-ink-400"}`}>
+            {mergeTarget
+              ? `“${mergeTarget}” already exists. Saving merges these ${books.length} books into it.`
+              : `Updates the series on all ${books.length} ${books.length === 1 ? "book" : "books"}.`}
+          </p>
+        </form>
+      )}
       <p className="mt-2 text-sm text-ink-500 dark:text-ink-400">
         {authors.slice(0, 3).join(", ")}
         {authors.length ? " · " : ""}

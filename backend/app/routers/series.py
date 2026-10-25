@@ -2,7 +2,7 @@ import re
 from typing import Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -10,7 +10,7 @@ from ..auth import get_current_user
 from ..db import get_db
 from ..models import Book, User
 from ..schemas import BookOut
-from ..services import library
+from ..services import library, storage
 
 router = APIRouter(prefix="/api/series", tags=["series"])
 
@@ -73,3 +73,29 @@ def series_books(
     if not books:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Series not found")
     return [library.to_out(b) for b in sorted(books, key=index_key)]
+
+
+class SeriesRename(BaseModel):
+    name: str = Field(min_length=1)
+    new_name: str = Field(min_length=1, max_length=255)
+
+
+@router.patch("")
+def rename_series(body: SeriesRename, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Rename a series on all of the user's books. Renaming onto an existing series merges them."""
+    grouped = _series_books(db, user)
+    books = grouped.get(body.name.strip())
+    if not books:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Series not found")
+    new_name = body.new_name.strip()
+    if not new_name:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Series name is required")
+    merged = new_name != body.name.strip() and new_name in grouped
+    for book in books:
+        book.series = new_name
+        # Keep file names in sync when the naming template uses {series}.
+        book.file_path = storage.relocate(
+            book.file_path, storage.render_name(library.book_metadata(book), book.file_format)
+        )
+    db.commit()
+    return {"name": new_name, "updated": len(books), "merged": merged}
